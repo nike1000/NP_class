@@ -1,30 +1,7 @@
-#include <stdio.h>
-#include <stdlib.h>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <string.h>
-#include <netinet/in.h>
+#include "../include/netshell.h"
 
-#define ANSI_COLOR_RED     "\x1b[31m"
-#define ANSI_COLOR_GREEN   "\x1b[32m"
-#define ANSI_COLOR_YELLOW  "\x1b[33m"
-#define ANSI_COLOR_BLUE    "\x1b[34m"
-#define ANSI_COLOR_MAGENTA "\x1b[35m"
-#define ANSI_COLOR_CYAN    "\x1b[36m"
-#define ANSI_COLOR_RESET   "\x1b[0m"
-
-#define SERV_TCP_PORT 6085
-#define MAXCONN 5
-#define LINEMAX 15000
-#define PROMOT "% "
-#define WELCOME_MSG "****************************************\n"\
-                    "** Welcome to the information server. **\n"\
-                    "****************************************\n"
-
-void err_dump(char *);
-int start_server();
-void send_welmsg(int);
-void recv_cli_cmd(int);
+linenode* headnode = NULL;
+linenode* curnode = NULL;
 
 
 void err_dump(char *string)
@@ -36,6 +13,8 @@ void err_dump(char *string)
 int main()
 {
     int clifd;
+    headnode=create_node(0,"HEAD_NODE");
+    curnode=headnode;
 
     /* start server socket and appcet connection,
      * after accept and fork, child process will return client file descriptor,
@@ -60,7 +39,7 @@ int start_server()
 
     // server socket file descriptor
     sockfd = socket(AF_INET, SOCK_STREAM, 0);
-    
+
     if(sockfd < 0)    /* sockfd = -1 if socket() error */
     {
         err_dump("server: can't open stream socket");
@@ -85,7 +64,7 @@ int start_server()
     {
         int clilen = sizeof(cli_addr);
         clifd = accept(sockfd, (struct sockaddr *) &cli_addr, &clilen);
-        
+
         if(clifd == -1)
         {
             err_dump("server: accept failed");
@@ -140,6 +119,7 @@ void recv_cli_cmd(int clifd)
     int readstat;
     char *delim = "\r\n";
 
+    int count=1;
     for(;;)
     {
         write(clifd, PROMOT, sizeof(PROMOT));
@@ -148,14 +128,27 @@ void recv_cli_cmd(int clifd)
 
         if(readstat > 0)
         {
-            char *subline = strtok(buffer, delim);
+            char *line = strtok(buffer, delim);
 
             do
             {
-                printf("%s\n", subline);
-                subline = strtok(NULL, delim);
-            }while(subline);
+                char *linecopy = malloc(sizeof(char)*strlen(line));
+                strcpy(linecopy,line);
 
+                linenode* newnode = create_node(count++,linecopy);
+                insert_node(curnode, newnode);
+                curnode = curnode->nextPtr;
+                print_lists(headnode);
+
+                line = strtok(NULL, delim);
+            }while(line);
+
+        }
+
+        if(strcmp(curnode->cmdline,"exit")==0)
+        {
+            free_lists(headnode);
+            break;
         }
     }
 
