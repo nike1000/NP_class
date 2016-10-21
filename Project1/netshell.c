@@ -15,29 +15,44 @@
 
 #define SERV_TCP_PORT 6085
 #define MAXCONN 5
+#define LINEMAX 15000
+#define PROMOT "% "
 #define WELCOME_MSG "****************************************\n"\
                     "** Welcome to the information server. **\n"\
                     "****************************************\n"
 
 void err_dump(char *);
-void start_server();
+int start_server();
 void send_welmsg(int);
+void recv_cli_cmd(int);
+
 
 void err_dump(char *string)
 {
-    printf("%s\n", string);
+    fprintf(stderr, "%s\n", string);
     exit(EXIT_FAILURE);
 }
 
 int main()
 {
-    
-    start_server();
+    int clifd;
 
+    /* start server socket and appcet connection,
+     * after accept and fork, child process will return client file descriptor,
+     *  server return -1 */
+    clifd = start_server();
+
+    if(clifd == -1)    /* Parent return */
+    {
+        exit(0);
+    }
+
+    send_welmsg(clifd);
+    recv_cli_cmd(clifd);
     return 0;
 }
 
-void start_server()
+int start_server()
 {
     int sockfd, clifd;
     int fpid;
@@ -87,7 +102,7 @@ void start_server()
         }
         else                 /* First Child Process */
         {
-            int spid;
+            int spid;    /* Second fork PID */
             if((spid=fork()) < 0)    /* we fork twice and exit first child immediate ,let init be the parent of second child to avoid zombie */
             {
                 err_dump("server: fork error");
@@ -99,12 +114,8 @@ void start_server()
             else                     /* Second Child Process */
             {
                 close(sockfd);    /* close sockfd in child process, we only need clifd to communicate with client */
-                send_welmsg(clifd);
-                printf("%s%s%s", ANSI_COLOR_GREEN, WELCOME_MSG, ANSI_COLOR_RESET);
-                shutdown(clifd, SHUT_RDWR);
-                close(clifd);
                 sleep(1);
-                exit(0);
+                return clifd;    /* return clifd to main function to execute next function */
             }
         }
 
@@ -112,14 +123,43 @@ void start_server()
         {
             err_dump("server: waitpid error");
         }
-
     }
-    return;
+    return -1;
 }
 
 void send_welmsg(int clifd)
 {
-    char buffer[1024];
+    char buffer[LINEMAX];
     sprintf(buffer, "%s%s%s", ANSI_COLOR_MAGENTA, WELCOME_MSG, ANSI_COLOR_RESET);
-    send(clifd, buffer, strlen(buffer), 0);
+    write(clifd, buffer, strlen(buffer));
+}
+
+void recv_cli_cmd(int clifd)
+{
+    char buffer[LINEMAX];
+    int readstat;
+    char *delim = "\r\n";
+
+    for(;;)
+    {
+        write(clifd, PROMOT, sizeof(PROMOT));
+        bzero((char *)buffer, LINEMAX);
+        readstat = read(clifd, buffer, LINEMAX);
+
+        if(readstat > 0)
+        {
+            char *subline = strtok(buffer, delim);
+
+            do
+            {
+                printf("%s\n", subline);
+                subline = strtok(NULL, delim);
+            }while(subline);
+
+        }
+    }
+
+    shutdown(clifd, SHUT_RDWR);
+    close(clifd);
+    exit(0);
 }
