@@ -5,6 +5,7 @@
 #include <sys/socket.h>
 #include <string.h>
 #include <netinet/in.h>
+#include <unistd.h>
 #include "li3.h"
 
 #define ANSI_COLOR_RED     "\x1b[31m"

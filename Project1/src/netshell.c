@@ -2,7 +2,7 @@
 
 linenode* headnode = NULL;
 linenode* curnode = NULL;
-
+char* colors[] = {ANSI_COLOR_RED, ANSI_COLOR_GREEN, ANSI_COLOR_YELLOW, ANSI_COLOR_BLUE, ANSI_COLOR_MAGENTA, ANSI_COLOR_CYAN};
 
 void err_dump(char *string)
 {
@@ -98,7 +98,7 @@ int start_server()
             }
         }
 
-        if (waitpid(fpid, NULL, 0) != fpid)
+        if (waitpid(fpid, NULL, 0) != fpid)     /* wait for First Child Process, it will exit immediate after fork */
         {
             err_dump("server: waitpid error");
         }
@@ -109,7 +109,7 @@ int start_server()
 void send_welmsg(int clifd)
 {
     char buffer[LINEMAX];
-    sprintf(buffer, "%s%s%s", ANSI_COLOR_MAGENTA, WELCOME_MSG, ANSI_COLOR_RESET);
+    sprintf(buffer, "%s%s%s", colors[getpid() % 6], WELCOME_MSG, ANSI_COLOR_RESET);
     write(clifd, buffer, strlen(buffer));
 }
 
