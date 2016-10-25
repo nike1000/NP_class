@@ -28,5 +28,7 @@ void err_dump(char *);
 int start_server();
 void send_welmsg(int);
 void recv_cli_cmd(int);
+void rm_endspace(char *);
+int get_endnum(char *);
 
 #endif

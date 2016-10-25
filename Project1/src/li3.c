@@ -1,10 +1,11 @@
 #include "../include/li3.h"
 
-linenode* create_node(int linenum, char* data)
+linenode* create_node(int linenum, char* data, int pipeto)
 {
     linenode* n = (linenode*)malloc(sizeof(linenode));
     n->linenum = linenum;
 	n->cmdline = data;
+    n->pipeto = pipeto;
     n->nextPtr = NULL;
     return n;
 }
@@ -26,7 +27,7 @@ void print_lists(linenode* lists)
     
     while (n != NULL)
     {
-        printf("%d:%s ", n->linenum, n->cmdline);
+        printf("%d:%s,%d ", n->linenum, n->cmdline, n->pipeto);
         n = n->nextPtr;
     }
 

@@ -8,10 +8,11 @@ typedef struct linenode
 {
     int linenum;
     char* cmdline;
+    int pipeto;
     struct linenode* nextPtr;
 }linenode;
 
-linenode* create_node(int, char*);
+linenode* create_node(int, char*, int);
 void insert_node(linenode *, linenode *);
 void remove_node(linenode *);
 void print_lists(linenode *);
