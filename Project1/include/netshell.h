@@ -19,6 +19,10 @@
 #define SERV_TCP_PORT 6085
 #define MAXCONN 5
 #define LINEMAX 15000
+#define MAX_ARG_COUNT 15
+#define MAX_CMD_COUNT 5
+
+
 #define PROMOT "% "
 #define WELCOME_MSG "****************************************\n"\
                     "** Welcome to the information server. **\n"\
@@ -28,7 +32,9 @@ void err_dump(char *);
 int start_server();
 void send_welmsg(int);
 void recv_cli_cmd(int);
-void rm_endspace(char *);
+char *rm_fespace(char *);
 int get_endnum(char *);
-
+char ***parse_cmd_seq(char *);
+void execute_cmdline(char ***);
+void creat_proc(char **argv, int fd_in, int fd_out, int pipes_count, int pipes_fd[][2]);
 #endif

@@ -9,6 +9,8 @@ typedef struct linenode
     int linenum;
     char* cmdline;
     int pipeto;
+    int done;
+    int fd_in;
     struct linenode* nextPtr;
 }linenode;
 

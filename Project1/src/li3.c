@@ -6,6 +6,8 @@ linenode* create_node(int linenum, char* data, int pipeto)
     n->linenum = linenum;
 	n->cmdline = data;
     n->pipeto = pipeto;
+    n->done = 0;
+    n->fd_in = -1;
     n->nextPtr = NULL;
     return n;
 }
