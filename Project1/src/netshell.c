@@ -18,7 +18,7 @@ int main()
     curnode = headnode;
     tailnode = headnode;
 
-    //setenv("PATH", "bin:.", 1);
+    setenv("PATH", "ras/bin:.", 1);
 
     /* start server socket and appcet connection,
      * after accept and fork, child process will return client file descriptor,
@@ -321,6 +321,8 @@ void execute_cmdline(char ***argvs)
         if(C == cmd_count-1 && curnode->pipeto == 0)    /* cmd is at the end of line, and no pipe to later line */
         {
             fd_out = clifd;
+            close(pipes_fd[C][0]);    /* output to client, we don't need the last pipe */
+            close(pipes_fd[C][1]);
         }
         else if(C == cmd_count-1 && curnode->pipeto != 0)    /* cmd is at the end of line, but pipe to later line */
         {
