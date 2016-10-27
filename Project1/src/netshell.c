@@ -148,6 +148,14 @@ void recv_cli_cmd(int clifd)
         {
             line = rm_fespace(line);    /* to catch |N in the end of line, we remove all space at the end */
 
+            if(strcmp(line,"exit")==0)
+            {
+                free_lists(headnode);
+                shutdown(clifd, SHUT_RDWR);
+                close(clifd);
+                exit(0);
+            }
+
             int is_env = reg_match("^(setenv|printenv)", line);    /* setenv, printenv */
             if(is_env)
             {
@@ -190,17 +198,7 @@ void recv_cli_cmd(int clifd)
 
             line = strtok(NULL, delim);
         }while(line);// strtok return NULL when , NULL pointer is false
-
-        if(strcmp(curnode->cmdline,"exit")==0)
-        {
-            free_lists(headnode);
-            break;
-        }
     }
-
-    shutdown(clifd, SHUT_RDWR);
-    close(clifd);
-    exit(0);
 }
 
 /*
@@ -410,7 +408,18 @@ void execute_cmdline(char ***argvs)
         {
             fd_out = pipes_fd[C][1];
         }
-        creat_proc(argvs[C], fd_in, fd_out, cmd_count-1, pipes_fd);
+
+        int fd_err;
+        if(C == cmd_count-1 && curnode->pipe_err == 1)
+        {
+            fd_err = fd_out;
+        }
+        else
+        {
+            fd_err = clifd;
+        }
+
+        creat_proc(argvs[C], fd_in, fd_out, fd_err, cmd_count-1, pipes_fd);
     }
 
     for (P = 0; P < cmd_count-1; ++P)    /* close fd that we already used and no longer need */
@@ -437,7 +446,7 @@ void execute_cmdline(char ***argvs)
     }
 }
 
-void creat_proc(char **argv, int fd_in, int fd_out, int pipes_count, int pipes_fd[][2])
+void creat_proc(char **argv, int fd_in, int fd_out, int fd_err, int pipes_count, int pipes_fd[][2])
 {
     pid_t proc = fork();
 
@@ -456,9 +465,9 @@ void creat_proc(char **argv, int fd_in, int fd_out, int pipes_count, int pipes_f
         {
             dup2(fd_out, STDOUT_FILENO);
         }
-        if(curnode->pipe_err)
+        if(fd_err != STDERR_FILENO)
         {
-            dup2(fd_out, STDERR_FILENO);
+            dup2(fd_err, STDERR_FILENO);
         }
 
         int P;
