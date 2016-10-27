@@ -6,6 +6,7 @@
 #include <string.h>
 #include <netinet/in.h>
 #include <unistd.h>
+#include <regex.h>
 #include "li3.h"
 
 #define ANSI_COLOR_RED     "\x1b[31m"
@@ -32,6 +33,7 @@ void err_dump(char *);
 int start_server();
 void send_welmsg(int);
 void recv_cli_cmd(int);
+void create_linenode(char *,int);
 char *rm_fespace(char *);
 int get_endnum(char *);
 char ***parse_cmd_seq(char *);

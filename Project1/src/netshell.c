@@ -3,8 +3,8 @@
 linenode* headnode = NULL;
 linenode* curnode = NULL;
 linenode* tailnode = NULL;
-char* colors[] = {ANSI_COLOR_RED, ANSI_COLOR_GREEN, ANSI_COLOR_YELLOW, ANSI_COLOR_BLUE, ANSI_COLOR_MAGENTA, ANSI_COLOR_CYAN};
 int clifd;
+int linecount = 1;
 
 void err_dump(char *string)
 {
@@ -118,6 +118,7 @@ int start_server()
  * */
 void send_welmsg(int clifd)
 {
+    char* colors[] = {ANSI_COLOR_RED, ANSI_COLOR_GREEN, ANSI_COLOR_YELLOW, ANSI_COLOR_BLUE, ANSI_COLOR_MAGENTA, ANSI_COLOR_CYAN};
     char buffer[LINEMAX];
     sprintf(buffer, "%s%s%s", colors[getpid() % 6], WELCOME_MSG, ANSI_COLOR_RESET);    /* different colors of welcome message for client */
     write(clifd, buffer, strlen(buffer));    /* write welcome message to client */
@@ -129,68 +130,59 @@ void send_welmsg(int clifd)
 void recv_cli_cmd(int clifd)
 {
     char buffer[LINEMAX];
-    int readstat;
     char *delim = "\r\n";
 
-    int count=1;
     for(;;)
     {
         write(clifd, PROMOT, sizeof(PROMOT));    /* show promot to client */
         memset((char *)buffer, '\0', LINEMAX);
-        readstat = read(clifd, buffer, LINEMAX);
+        read(clifd, buffer, LINEMAX);
 
-        if(readstat <= 0)
+        char *line = strtok(buffer, delim);    /* for some program, we may receive more than one line with once client write */
+        if(!line)    /* just \r\n ,empty line, line will be NULL after strtok */
         {
             continue;
         }
 
-        char *line = strtok(buffer, delim);    /* for some program, we may receive more than one line with once client write */
-
         do
         {
-            rm_fespace(line);    /* to catch |N in the end of line, we remove all space at the end */
-            int pipetonum = get_endnum(line);    /* get the number at the end of line */
+            line = rm_fespace(line);    /* to catch |N in the end of line, we remove all space at the end */
 
-            char *linecopy = malloc(sizeof(char)*strlen(line));
-            strcpy(linecopy,line);      /* copy string to store in linelinklist, if use line ,it will be change because of pointer, linecmd of each node will same as last node */
-            if(curnode->nextPtr == NULL)    /* curnode equal to tailnode, is at the end of list, so we make new node for incoming cmdline */
+            int is_env = reg_match("^(setenv|printenv)", line);    /* setenv, printenv */
+            if(is_env)
             {
-                linenode* newnode = create_node(count++,linecopy,pipetonum);
-                insert_node(tailnode, newnode);
-                tailnode = tailnode->nextPtr;
-                curnode = curnode->nextPtr;
+                // not pipe or redirect, do all by self
+                create_linenode(line, 0);
+                continue;
             }
-            /* curnode is not equal to tailnode,
-             * means the earlier cmdline have a pipe to the cmd not coming yet and we create node without cmd at that time,
-             * so now we can set cmdline to node without create node again */
+
+            int is_tofile = reg_match("[^\\|/][ ]*>[ ]*[^\\|/]$", line);    /* match > to file at the end of line */
+            if(is_tofile)
+            {
+                // create 1 linenode, but need openfile later
+                create_linenode(line, 0);
+                continue;
+            }
+
+            int pipe_err = reg_match("![1-9][0-9]*$", line);    /* match !N at the end of line */
+            int pipe_out = reg_match("\\|[1-9][0-9]*$", line);  /* match |N at the end of line */
+
+            if(!pipe_err && !pipe_out)
+            {
+                create_linenode(line, 0);    /* xxx | yyy | zzz  */
+            }
             else
             {
-                curnode = curnode->nextPtr;
-                curnode->cmdline = linecopy;
-                curnode->pipeto = pipetonum;
-            }
-
-            /* if the cmdline end of |N, we need to creat node for later N cmdline to pipe current node cmd to that file descriptor */
-            if(pipetonum > 0)    /* end of line is |N */
-            {
-                int stillneed = pipetonum-((tailnode->linenum)-(curnode->linenum));    /* some empty node may be create by earlier |N cmdline, we only need to create the number of node we still need*/
-
-                while(stillneed > 0)
+                create_linenode(line, get_endnum(line));
+                if(pipe_err)
                 {
-                    linenode* newnode = create_node(count++, NULL, 0);
-                    insert_node(tailnode, newnode);
-                    tailnode = tailnode->nextPtr;
-                    stillneed--;
+                    curnode->pipe_err = 1;
                 }
             }
 
-            print_lists(headnode);
+            //print_lists(headnode);
 
-            if(curnode->done == 0)
-            {
-                execute_cmdline(parse_cmd_seq(line));
-                curnode->done == 1;
-            }
+            execute_cmdline(parse_cmd_seq(line));
 
             line = strtok(NULL, delim);
         }while(line);// strtok return NULL when , NULL pointer is false
@@ -200,12 +192,53 @@ void recv_cli_cmd(int clifd)
             free_lists(headnode);
             break;
         }
-
     }
 
     shutdown(clifd, SHUT_RDWR);
     close(clifd);
     exit(0);
+}
+
+/*
+ * one cmdline one node, cmd line may include multiple cmds
+ * */
+
+void create_linenode(char* line, int pipetonum)
+{
+
+    char *linecopy = malloc(sizeof(char)*strlen(line));
+    strcpy(linecopy,line);    /* copy string to store in linelinklist, if use line ,it will be change because of pointer, linecmd of each node will same as last node */
+
+    if(curnode->nextPtr == NULL)    /* curnode equal to tailnode, is at the end of list, so we make new node for incoming cmdline */
+    {
+        linenode* newnode = create_node(linecount++,linecopy,pipetonum);
+        insert_node(tailnode, newnode);
+        tailnode = tailnode->nextPtr;
+        curnode = curnode->nextPtr;
+    }
+    /* curnode is not equal to tailnode,
+     * means the earlier cmdline have a pipe to the cmd not coming yet and we create node without cmd at that time,
+     * so now we can set cmdline to node without create node again */
+    else
+    {
+        curnode = curnode->nextPtr;
+        curnode->cmdline = linecopy;
+        curnode->pipeto = pipetonum;
+    }
+
+    /* if the cmdline end of |N, we need to creat node for later N cmdline to pipe current node cmd to that file descriptor */
+    if(pipetonum > 0)    /* end of line is |N */
+    {
+        int stillneed = pipetonum-((tailnode->linenum)-(curnode->linenum));    /* some empty node may be create by earlier |N cmdline, we only need to create the number of node we still need*/
+
+        while(stillneed > 0)
+        {
+            linenode* newnode = create_node(linecount++, NULL, 0);
+            insert_node(tailnode, newnode);
+            tailnode = tailnode->nextPtr;
+            stillneed--;
+        }
+    }
 }
 
 /*
@@ -240,6 +273,32 @@ char *rm_fespace(char* line)
 }
 
 /*
+ * regular expression, if line match pattern return true, else false
+ * */
+int reg_match(char *pattern, char* line)
+{
+    int status;
+    int cflags = REG_EXTENDED;
+    regmatch_t pmatch[1];
+    const size_t nmatch = 1;
+    regex_t reg;
+
+    regcomp(&reg, pattern, cflags);
+    status = regexec(&reg, line, nmatch, pmatch, 0);
+    regfree(&reg);
+
+    if(status == REG_NOMATCH)
+    {
+        return 0;
+    }
+    else
+    {
+        return 1;
+    }
+}
+
+
+/*
  * check whether tje end of line is legal, get |N number at the end of line, then remove it from line
  * */
 int get_endnum(char* line)
@@ -255,16 +314,9 @@ int get_endnum(char* line)
 
     if(count == strlen(line)-1)    /* count didn't move, means line not end by number */
     {
-        if(line[count] == '|' || line[count] == '>' || line[count] == '<')    /* |>< at the end of line, error format */
-        {
-            return -1;
-        }
-        else    /* no pipe to later line */
-        {
-            return 0;
-        }
+        return 0;
     }
-    else if(line[count] == '|')    /* match |NN.. at end of line */
+    else if(line[count] == '|'||line[count] == '!')    /* match |NN.. or !NN at end of line */
     {
         char pipetonum[strlen(line)-1-count];
         strcpy(pipetonum, &line[count+1]);
@@ -386,6 +438,10 @@ void creat_proc(char **argv, int fd_in, int fd_out, int pipes_count, int pipes_f
         if (fd_out != STDOUT_FILENO)
         {
             dup2(fd_out, STDOUT_FILENO);
+        }
+        if(curnode->pipe_err)
+        {
+            dup2(fd_out, STDERR_FILENO);
         }
 
         int P;
