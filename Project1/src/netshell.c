@@ -146,10 +146,9 @@ void recv_cli_cmd(int clifd)
 
         char *line = strtok(buffer, delim);    /* for some program, we may receive more than one line with once client write */
 
-        rm_fespace(line);    /* to catch |N in the end of line, we remove all space at the end */
-
         do
         {
+            rm_fespace(line);    /* to catch |N in the end of line, we remove all space at the end */
             int pipetonum = get_endnum(line);    /* get the number at the end of line */
 
             char *linecopy = malloc(sizeof(char)*strlen(line));
@@ -288,9 +287,9 @@ void execute_cmdline(char ***argvs)
         ++cmd_count;
     }
 
-    int pipes_fd[MAX_CMD_COUNT][2];    /* prepare pipe fd ,read from [0], write to [1] */
+    int pipes_fd[MAX_CMD_COUNT][2];    /* prepare pipe fd ,read from [0], write to [1] , there are MAX_CMD_COUNT fd group, but last one not always used */
 
-    for (P = 0; P < cmd_count; ++P)    /* create pipes, use between cmd, the last one pipe is pipe to later line, not always used */
+    for (P = 0; P < cmd_count-1; ++P)    /* create pipes, use between cmd, pipes equals to command-1 */
     {
         if (pipe(pipes_fd[P]) == -1)
         {
@@ -303,13 +302,13 @@ void execute_cmdline(char ***argvs)
     {
         int fd_in;    /* this is input fd for cmd, cmd will read input from this fd */
 
-        if(C == 0 && curnode->fd_in == -1)    /* cmd is at beginning of line, and no earlier line pipe to this line */
+        if(C == 0 && curnode->fd_readout == -1)    /* cmd is at beginning of line, and no earlier line pipe to this line */
         {
             fd_in = STDIN_FILENO;
         }
-        else if(C == 0 && curnode->fd_in != -1)    /* cmd is at beginning of line, but some earlier line pipe output to this line */
+        else if(C == 0 && curnode->fd_readout != -1)    /* cmd is at beginning of line, but some earlier line pipe output to this line */
         {
-            fd_in = curnode->fd_in;
+            fd_in = curnode->fd_readout;
         }
         else    /* cmd is not at beginning of line, just read input from previous pipe */
         {
@@ -321,19 +320,27 @@ void execute_cmdline(char ***argvs)
         if(C == cmd_count-1 && curnode->pipeto == 0)    /* cmd is at the end of line, and no pipe to later line */
         {
             fd_out = clifd;
-            close(pipes_fd[C][0]);    /* output to client, we don't need the last pipe */
-            close(pipes_fd[C][1]);
         }
         else if(C == cmd_count-1 && curnode->pipeto != 0)    /* cmd is at the end of line, but pipe to later line */
         {
-            fd_out = pipes_fd[C][1];    /* output fd is the last one of pipe [1] (write end) */
             linenode* tmpnode = curnode;
             while(tmpnode->linenum != curnode->linenum + curnode->pipeto)    /* find the node of line we want to pipe to */
             {
                 tmpnode = tmpnode->nextPtr;
             }
 
-            tmpnode->fd_in = pipes_fd[C][0];    /* keep the last pipe fd [0] (read end) in later line node fd_in */
+            if(tmpnode->fd_readout == -1)    /* if no other earlier line pipe to the same line we want to pipe (for later line node, this is the first line want to pipe to it)*/
+            {
+                if (pipe(pipes_fd[C]) == -1)    /* create a new pipe */
+                {
+                    fprintf(stderr, "Error: Unable to create pipe. (%d)\n", P);
+                    exit(EXIT_FAILURE);
+                }
+                tmpnode->fd_readout = pipes_fd[C][0];    /* keep the last pipe fd [0] (read end) in later line node fd_readout */
+                tmpnode->fd_writein = pipes_fd[C][1];    /* keep the last pipe fd [1] (write end) in later line node fd_writein */
+            }
+
+            fd_out = tmpnode->fd_writein;    /* output fd is the last one of pipe [1] (write end) */
         }
         else    /* cmd is not at the end of line, just write output to next pipe */
         {
@@ -348,10 +355,10 @@ void execute_cmdline(char ***argvs)
         close(pipes_fd[P][1]);
     }
 
-    close(pipes_fd[P][1]);    /* close write end of last pipe, but keep read end for later line use */
-    if(curnode->fd_in >= 0)
+    if(curnode->fd_readout >= 0)    /* close fd of current line node */
     {
-        close(curnode->fd_in);
+        close(curnode->fd_readout);
+        close(curnode->fd_writein);
     }
 
     for (C = 0; C < cmd_count; ++C)
@@ -387,11 +394,11 @@ void creat_proc(char **argv, int fd_in, int fd_out, int pipes_count, int pipes_f
             close(pipes_fd[P][0]);
             close(pipes_fd[P][1]);
         }
-        close(pipes_fd[P][1]);
 
-        if(curnode->fd_in >= 0)
+        if(curnode->fd_readout >= 0)
         {
-            close(curnode->fd_in);
+            close(curnode->fd_readout);
+            close(curnode->fd_writein);
         }
 
         if (execvp(argv[0], argv) == -1)
