@@ -3,10 +3,12 @@
 
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
 #include <string.h>
 #include <netinet/in.h>
 #include <unistd.h>
 #include <regex.h>
+#include <fcntl.h>
 #include "li3.h"
 
 #define ANSI_COLOR_RED     "\x1b[31m"
@@ -21,7 +23,7 @@
 #define MAXCONN 5
 #define LINEMAX 15000
 #define MAX_ARG_COUNT 15
-#define MAX_CMD_COUNT 5
+#define MAX_CMD_COUNT 15000
 
 
 #define PROMOT "% "
@@ -35,6 +37,7 @@ void send_welmsg(int);
 void recv_cli_cmd(int);
 void create_linenode(char *,int);
 char *rm_fespace(char *);
+char* get_filename(char *);
 int get_endnum(char *);
 char ***parse_cmd_seq(char *);
 void execute_cmdline(char ***);

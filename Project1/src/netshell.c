@@ -18,7 +18,7 @@ int main()
     curnode = headnode;
     tailnode = headnode;
 
-    setenv("PATH", "ras/bin:.", 1);
+    setenv("PATH", "bin:.", 1);
 
     /* start server socket and appcet connection,
      * after accept and fork, child process will return client file descriptor,
@@ -153,14 +153,18 @@ void recv_cli_cmd(int clifd)
             {
                 // not pipe or redirect, do all by self
                 create_linenode(line, 0);
+                line = strtok(NULL, delim);
                 continue;
             }
 
-            int is_tofile = reg_match("[^\\|/][ ]*>[ ]*[^\\|/]$", line);    /* match > to file at the end of line */
+            int is_tofile = reg_match(">[ ]*[^\\|/]+$", line);    /* match > to file at the end of line */
             if(is_tofile)
             {
-                // create 1 linenode, but need openfile later
+                char* filename = rm_fespace(get_filename(line));
                 create_linenode(line, 0);
+                curnode->fd_tofile = open(filename, O_RDWR|O_CREAT|O_TRUNC, S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP|S_IROTH|S_IROTH);    /* default umask 022 */
+                execute_cmdline(parse_cmd_seq(line));
+                line = strtok(NULL, delim);
                 continue;
             }
 
@@ -202,7 +206,6 @@ void recv_cli_cmd(int clifd)
 /*
  * one cmdline one node, cmd line may include multiple cmds
  * */
-
 void create_linenode(char* line, int pipetonum)
 {
 
@@ -297,6 +300,22 @@ int reg_match(char *pattern, char* line)
     }
 }
 
+char* get_filename(char* line)
+{
+    int count;
+    for(count = strlen(line)-1; count >= 0; count--)   /* count will stop at the index of first non-digital char come from end */
+    {
+        if(line[count] == '>')
+        {
+            break;
+        }
+    }
+
+    char* filename = malloc(sizeof(char)*(strlen(line)-1-count));
+    strcpy(filename, &line[count+1]);
+    line[count] = 0;    /* remove > xxx from string */
+    return filename;
+}
 
 /*
  * check whether tje end of line is legal, get |N number at the end of line, then remove it from line
@@ -312,21 +331,10 @@ int get_endnum(char* line)
         }
     }
 
-    if(count == strlen(line)-1)    /* count didn't move, means line not end by number */
-    {
-        return 0;
-    }
-    else if(line[count] == '|'||line[count] == '!')    /* match |NN.. or !NN at end of line */
-    {
-        char pipetonum[strlen(line)-1-count];
-        strcpy(pipetonum, &line[count+1]);
-        line[count] = 0;    /* remove |N from string */
-        return atoi(pipetonum);
-    }
-    else    /* just fileNNN, not pipe format */
-    {
-        return 0;
-    }
+    char pipetonum[strlen(line)-1-count];
+    strcpy(pipetonum, &line[count+1]);
+    line[count] = 0;    /* remove |N from string */
+    return atoi(pipetonum);
 }
 
 void execute_cmdline(char ***argvs)
@@ -369,7 +377,11 @@ void execute_cmdline(char ***argvs)
 
         int fd_out;    /* this is output fd for cmd, cmd will write output to this fd */
 
-        if(C == cmd_count-1 && curnode->pipeto == 0)    /* cmd is at the end of line, and no pipe to later line */
+        if(C == cmd_count-1 && curnode->fd_tofile != -1)
+        {
+            fd_out = curnode->fd_tofile;
+        }
+        else if(C == cmd_count-1 && curnode->pipeto == 0)    /* cmd is at the end of line, and no pipe to later line */
         {
             fd_out = clifd;
         }
@@ -411,6 +423,11 @@ void execute_cmdline(char ***argvs)
     {
         close(curnode->fd_readout);
         close(curnode->fd_writein);
+    }
+
+    if(curnode->fd_tofile >= 0)
+    {
+        close(curnode->fd_tofile);
     }
 
     for (C = 0; C < cmd_count; ++C)
@@ -455,6 +472,11 @@ void creat_proc(char **argv, int fd_in, int fd_out, int pipes_count, int pipes_f
         {
             close(curnode->fd_readout);
             close(curnode->fd_writein);
+        }
+
+        if(curnode->fd_tofile >= 0)
+        {
+            close(curnode->fd_tofile);
         }
 
         if (execvp(argv[0], argv) == -1)

@@ -10,6 +10,7 @@ typedef struct linenode
     char* cmdline;
     int pipeto;
     int pipe_err;
+    int fd_tofile;
     int fd_readout;
     int fd_writein;
     struct linenode* nextPtr;
