@@ -134,7 +134,7 @@ void recv_cli_cmd(int clifd)
 
     for(;;)
     {
-        write(clifd, PROMOT, sizeof(PROMOT));    /* show promot to client */
+        write(clifd, PROMOT, sizeof(char)*strlen(PROMOT));    /* show promot to client */
         memset((char *)buffer, '\0', LINEMAX);
         read(clifd, buffer, LINEMAX);
 
