@@ -14,6 +14,7 @@ void err_dump(char *string)
 
 int main()
 {
+    chdir("ras/");
     headnode = create_node(0,"HEAD_NODE",0);
     curnode = headnode;
     tailnode = headnode;
@@ -156,11 +157,23 @@ void recv_cli_cmd(int clifd)
                 exit(0);
             }
 
-            int is_env = reg_match("^(setenv|printenv)", line);    /* setenv, printenv */
-            if(is_env)
+            int is_setenv = reg_match("^(setenv)", line);    /* setenv */
+            int is_printenv = reg_match("^(printenv)", line);    /* printenv */
+            if(is_setenv||is_printenv)
             {
                 // not pipe or redirect, do all by self
                 create_linenode(line, 0);
+                char ***argvs = parse_cmd_seq(line);
+                if(is_setenv)
+                {
+                    setenv(argvs[0][1],argvs[0][2],1);
+                }
+                else if(is_printenv)
+                {
+                    char *envstr = getenv(argvs[0][1]);
+                    envstr = strcat(envstr,"\n");
+                    write(clifd,envstr,sizeof(char)*strlen(envstr));
+                }
                 line = strtok(NULL, delim);
                 continue;
             }
