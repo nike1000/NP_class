@@ -345,7 +345,7 @@ void execute_cmdline(char ***argvs)
         ++cmd_count;
     }
 
-    int pipes_fd[MAX_CMD_COUNT][2];    /* prepare pipe fd ,read from [0], write to [1] , there are MAX_CMD_COUNT fd group, but last one not always used */
+    int pipes_fd[cmd_count][2];    /* prepare pipe fd ,read from [0], write to [1] , there are MAX_CMD_COUNT fd group, but last one not always used */
 
     for (P = 0; P < cmd_count-1; ++P)    /* create pipes, use between cmd, pipes equals to command-1 */
     {
@@ -419,30 +419,21 @@ void execute_cmdline(char ***argvs)
             fd_err = clifd;
         }
 
+        if(C == 0 && curnode->fd_writein >= 0)    /* if cmd at the first of begining, and this line will read in from previous line pipe */
+        {
+            close(curnode->fd_writein);    /* we need to close previous pipe writein end to send EOF to the first cmd of this line */
+        }
+
         creat_proc(argvs[C], fd_in, fd_out, fd_err, cmd_count-1, pipes_fd);
-    }
 
-    for (P = 0; P < cmd_count-1; ++P)    /* close fd that we already used and no longer need */
-    {
-        close(pipes_fd[P][0]);
-        close(pipes_fd[P][1]);
-    }
+        if(C != cmd_count-1 || curnode->fd_tofile != -1)    /* cmd pipe to cmd or cmd output to file*/
+        {
+            /*we need to close fd_out to send an EOF, avoid next cmd stuck (e.g: cat will not end until receive EOF)*/
+            close(fd_out);
+        }
 
-    if(curnode->fd_readout >= 0)    /* close fd of current line node */
-    {
-        close(curnode->fd_readout);
-        close(curnode->fd_writein);
-    }
-
-    if(curnode->fd_tofile >= 0)
-    {
-        close(curnode->fd_tofile);
-    }
-
-    for (C = 0; C < cmd_count; ++C)
-    {
-        int status;
-        wait(&status);
+        int stat;
+        wait(&stat);    /* wait for the client who call exec to run cmd, avoid child become zombie */
     }
 }
 
@@ -459,15 +450,18 @@ void creat_proc(char **argv, int fd_in, int fd_out, int fd_err, int pipes_count,
     {
         if (fd_in != STDIN_FILENO)
         {
-            dup2(fd_in, STDIN_FILENO);
+            if(dup2(fd_in, STDIN_FILENO)==-1)
+                err_dump("FD_IN ERROR");
         }
         if (fd_out != STDOUT_FILENO)
         {
-            dup2(fd_out, STDOUT_FILENO);
+            if(dup2(fd_out, STDOUT_FILENO)==-1)
+                err_dump("FD_OUT ERROR");
         }
         if(fd_err != STDERR_FILENO)
         {
-            dup2(fd_err, STDERR_FILENO);
+            if(dup2(fd_err, STDERR_FILENO)==-1)
+                err_dump("FD_ERR ERROR");
         }
 
         int P;
