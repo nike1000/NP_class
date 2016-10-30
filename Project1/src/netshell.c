@@ -181,9 +181,8 @@ void recv_cli_cmd(int clifd)
             int is_tofile = reg_match(">[ ]*[^\\|/]+$", line);    /* match > to file at the end of line */
             if(is_tofile)
             {
-                char* filename = rm_fespace(get_filename(line));
                 create_linenode(line, 0);
-                curnode->fd_tofile = open(filename, O_RDWR|O_CREAT|O_TRUNC, S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP|S_IROTH|S_IROTH);    /* default umask 022 */
+                curnode->filename = rm_fespace(get_filename(line));
                 execute_cmdline(parse_cmd_seq(line));
                 line = strtok(NULL, delim);
                 continue;
@@ -388,8 +387,9 @@ void execute_cmdline(char ***argvs)
 
         int fd_out;    /* this is output fd for cmd, cmd will write output to this fd */
 
-        if(C == cmd_count-1 && curnode->fd_tofile != -1)
+        if(C == cmd_count-1 && curnode->filename != NULL)
         {
+            curnode->fd_tofile = open(curnode->filename, O_RDWR|O_CREAT|O_TRUNC, S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP|S_IROTH|S_IROTH);
             fd_out = curnode->fd_tofile;
         }
         else if(C == cmd_count-1 && curnode->pipeto == 0)    /* cmd is at the end of line, and no pipe to later line */

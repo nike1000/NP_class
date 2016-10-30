@@ -11,6 +11,7 @@ typedef struct linenode
     int pipeto;
     int pipe_err;
     int fd_tofile;
+    char* filename;
     int fd_readout;
     int fd_writein;
     struct linenode* nextPtr;
