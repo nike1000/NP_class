@@ -171,7 +171,9 @@ void recv_cli_cmd(int clifd)
                 else if(is_printenv)
                 {
                     char *envstr = getenv(argvs[0][1]);
-                    envstr = strcat(envstr,"\n");
+                    char *prefix = strcat(argvs[0][1], "=");
+                    envstr = strcat(prefix, envstr);
+                    envstr = strcat(envstr, "\n");
                     write(clifd,envstr,sizeof(char)*strlen(envstr));
                 }
                 line = strtok(NULL, delim);
@@ -497,7 +499,7 @@ void creat_proc(char **argv, int fd_in, int fd_out, int fd_err, int pipes_count,
 
         if (execvp(argv[0], argv) == -1)
         {
-            fprintf(stderr, "Error: Unable to load the executable %s.\n", argv[0]);
+            fprintf(stderr, "Unknown command: [%s].\n", argv[0]);
             exit(EXIT_FAILURE);
         }
 
