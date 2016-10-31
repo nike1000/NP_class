@@ -70,7 +70,7 @@ int start_server()
 
     for(;;)
     {
-        int clilen = sizeof(cli_addr);
+        socklen_t clilen = sizeof(cli_addr);
         clifd = accept(sockfd, (struct sockaddr *) &cli_addr, &clilen);    /* accept client connection */
 
         if(clifd == -1)

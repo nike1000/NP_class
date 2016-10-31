@@ -2,6 +2,7 @@
 #define NETSHELL_H
 
 #include <sys/types.h>
+#include <ctype.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <string.h>
@@ -37,6 +38,7 @@ void send_welmsg(int);
 void recv_cli_cmd(int);
 void create_linenode(char *,int);
 char *rm_fespace(char *);
+int reg_match(char *, char*);
 char* get_filename(char *);
 int get_endnum(char *);
 char ***parse_cmd_seq(char *);
