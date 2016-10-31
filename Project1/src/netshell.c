@@ -350,8 +350,7 @@ int get_endnum(char* line)
 
 void execute_cmdline(char ***argvs)
 {
-    int C, P;
-
+    int C;
     int cmd_count = 0;
     while (argvs[cmd_count])    /* count cmd in this line */
     {
@@ -360,17 +359,17 @@ void execute_cmdline(char ***argvs)
 
     int pipes_fd[cmd_count][2];    /* prepare pipe fd ,read from [0], write to [1] , there are MAX_CMD_COUNT fd group, but last one not always used */
 
-    for (P = 0; P < cmd_count-1; ++P)    /* create pipes, use between cmd, pipes equals to command-1 */
-    {
-        if (pipe(pipes_fd[P]) == -1)
-        {
-            fprintf(stderr, "Error: Unable to create pipe. (%d)\n", P);
-            exit(EXIT_FAILURE);
-        }
-    }
-
     for (C = 0; C < cmd_count; ++C)
     {
+        if(C < cmd_count-1)    /* create pipes, use between cmd, pipes equals to command-1 */
+        {
+            if (pipe(pipes_fd[C]) == -1)
+            {
+                fprintf(stderr, "Error: Unable to create pipe. (%d)\n", C);
+                exit(EXIT_FAILURE);
+            }
+        }
+
         int fd_in;    /* this is input fd for cmd, cmd will read input from this fd */
 
         if(C == 0 && curnode->fd_readout == -1)    /* cmd is at beginning of line, and no earlier line pipe to this line */
@@ -409,7 +408,7 @@ void execute_cmdline(char ***argvs)
             {
                 if (pipe(pipes_fd[C]) == -1)    /* create a new pipe */
                 {
-                    fprintf(stderr, "Error: Unable to create pipe. (%d)\n", P);
+                    fprintf(stderr, "Error: Unable to create pipe. (%d)\n", C);
                     exit(EXIT_FAILURE);
                 }
                 tmpnode->fd_readout = pipes_fd[C][0];    /* keep the last pipe fd [0] (read end) in later line node fd_readout */
@@ -438,12 +437,17 @@ void execute_cmdline(char ***argvs)
             close(curnode->fd_writein);    /* we need to close previous pipe writein end to send EOF to the first cmd of this line */
         }
 
-        creat_proc(argvs[C], fd_in, fd_out, fd_err, cmd_count-1, pipes_fd);
+        creat_proc(argvs[C], fd_in, fd_out, fd_err, C, pipes_fd);
 
         if(C != cmd_count-1 || curnode->fd_tofile != -1)    /* cmd pipe to cmd or cmd output to file*/
         {
             /*we need to close fd_out to send an EOF, avoid next cmd stuck (e.g: cat will not end until receive EOF)*/
             close(fd_out);
+        }
+
+        if(C != 0)    /* close fd_in but avoid first cmd, don't close STDIN_FILENO */
+        {
+            close(fd_in);
         }
 
         int stat;
