@@ -170,11 +170,10 @@ void recv_cli_cmd(int clifd)
                 }
                 else if(is_printenv)
                 {
-                    char *envstr = getenv(argvs[0][1]);
-                    char *prefix = strcat(argvs[0][1], "=");
-                    envstr = strcat(prefix, envstr);
-                    envstr = strcat(envstr, "\n");
-                    write(clifd,envstr,sizeof(char)*strlen(envstr));
+                    char *env = getenv(argvs[0][1]);
+                    char *envstr =  malloc(snprintf(NULL, 0, "%s=%s\n", argvs[0][1], env) + 1);
+                    sprintf(envstr, "%s=%s\n", argvs[0][1], env);
+                    write(clifd, envstr, sizeof(char)*strlen(envstr));
                 }
                 line = strtok(NULL, delim);
                 continue;
