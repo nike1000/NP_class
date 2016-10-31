@@ -3,6 +3,7 @@
 
 #include <sys/types.h>
 #include <ctype.h>
+#include <sys/wait.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <string.h>
