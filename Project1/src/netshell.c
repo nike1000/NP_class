@@ -137,7 +137,16 @@ void recv_cli_cmd(int clifd)
     {
         write(clifd, PROMOT, sizeof(char)*strlen(PROMOT));    /* show promot to client */
         memset((char *)buffer, '\0', LINEMAX);
-        read(clifd, buffer, LINEMAX);
+        int byte_read = read(clifd, buffer, LINEMAX);
+
+        while(buffer[byte_read-1]!='\n')    /* in Internet, a large string line may be seperate to several packet, and we probably not get \n from one read */
+        {
+            char* tmpbuffer = buffer;
+            char append[LINEMAX];
+            memset((char *)append, '\0', LINEMAX);
+            byte_read += read(clifd, append, LINEMAX);
+            sprintf(buffer, "%s%s", tmpbuffer, append);
+        }
 
         char *line = strtok(buffer, delim);    /* for some program, we may receive more than one line with once client write */
         if(!line)    /* just \r\n ,empty line, line will be NULL after strtok */
