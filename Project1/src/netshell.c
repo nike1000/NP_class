@@ -63,6 +63,13 @@ int start_server()
         err_dump("server: can't bind local address");
     }
 
+    int yes = 1;
+    /* lose the pesky "Address already in use" error message */
+    if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &yes,sizeof(int)) == -1)
+    {
+        err_dump("server: can't set SO_REUSEADDR");
+    }
+
     if(listen(sockfd, MAXCONN) < 0)    /* -1 if listen fail, 0 if success */
     {
         err_dump("server: can't listen on socket");
