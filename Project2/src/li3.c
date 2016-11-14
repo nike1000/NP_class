@@ -1,8 +1,8 @@
 #include "../include/li3.h"
 
-linenode* create_node(int linenum, char* data, int pipeto)
+LineNode* create_node(int linenum, char* data, int pipeto)
 {
-    linenode* n = (linenode*)malloc(sizeof(linenode));
+    LineNode* n = (LineNode*)malloc(sizeof(LineNode));
     n->linenum = linenum;
 	n->cmdline = data;
     n->pipeto = pipeto;
@@ -15,20 +15,20 @@ linenode* create_node(int linenum, char* data, int pipeto)
     return n;
 }
 
-void insert_node(linenode* n1, linenode* n2)
+void insert_node(LineNode* n1, LineNode* n2)
 {
     n2->nextPtr = n1->nextPtr;
     n1->nextPtr = n2;
 }
 
-void remove_node(linenode* n1)
+void remove_node(LineNode* n1)
 {
     n1->nextPtr = n1->nextPtr->nextPtr;
 }
 
-void print_lists(linenode* lists)
+void print_lists(LineNode* lists)
 {
-    linenode* n = lists;
+    LineNode* n = lists;
     
     while (n != NULL)
     {
@@ -39,7 +39,7 @@ void print_lists(linenode* lists)
     printf("\n");
 }
 
-void free_lists(linenode* lists)
+void free_lists(LineNode* lists)
 {
     // 遞迴刪除串列所有節點
     if (lists->nextPtr != NULL)

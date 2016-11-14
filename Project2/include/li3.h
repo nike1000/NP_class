@@ -4,7 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-typedef struct linenode
+typedef struct LineNode
 {
     int linenum;
     char* cmdline;
@@ -14,13 +14,13 @@ typedef struct linenode
     char* filename;
     int fd_readout;
     int fd_writein;
-    struct linenode* nextPtr;
-}linenode;
+    struct LineNode* nextPtr;
+}LineNode;
 
-linenode* create_node(int, char*, int);
-void insert_node(linenode *, linenode *);
-void remove_node(linenode *);
-void print_lists(linenode *);
-void free_lists(linenode *);
+LineNode* create_node(int, char*, int);
+void insert_node(LineNode *, LineNode *);
+void remove_node(LineNode *);
+void print_lists(LineNode *);
+void free_lists(LineNode *);
 
 #endif

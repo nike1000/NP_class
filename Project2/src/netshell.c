@@ -1,25 +1,27 @@
+#include "../include/li3.h"
 #include "../include/netshell.h"
+#include "../include/myshm.h"
 
-linenode* headnode = NULL;
-linenode* curnode = NULL;
-linenode* tailnode = NULL;
+LineNode* headnode = NULL;
+LineNode* curnode = NULL;
+LineNode* tailnode = NULL;
 int clifd;
 int linecount = 1;
-
-void err_dump(char *string)
-{
-    fprintf(stderr, "%s\n", string);
-    exit(EXIT_FAILURE);
-}
+int shmid;
+int uid;
+CliInfo* shmdata;
 
 int main()
 {
     chdir("ras/");
+    setenv("PATH", "bin:.", 1);
     headnode = create_node(0,"HEAD_NODE",0);
     curnode = headnode;
     tailnode = headnode;
 
-    setenv("PATH", "bin:.", 1);
+    signal(SIGALRM, sigHandler);
+
+    initshm();   /* allocate shared memory and attach shared memory by shmget and shmat function */
 
     /* start server socket and appcet connection,
      * after accept and fork, child process will return client file descriptor,
@@ -30,11 +32,71 @@ int main()
     {
         exit(0);
     }
+    else
+    {
+        commuto_client();
+    }
 
-    send_welmsg(clifd);
-    recv_cli_cmd(clifd);
     return 0;
 }
+
+
+/*
+ * when a client yell or tell, that client will copy msg to shm for other client,
+ * and send a signal to other client.
+ * So, when process get an signal, write the msg to clifd
+ * */
+void sigHandler(int sig)
+{
+    write(clifd, shmdata[uid].msg, strlen(shmdata[uid].msg));
+    strcpy(shmdata[uid].msg, " ");
+}
+
+/*
+ * get shared memory to store client info in CliInfo struct,
+ * attech shared memory and init uid and pid for CliInfo inshm
+ * */
+
+void initshm()
+{
+    shmid = shmget(SHMKEY, sizeof(CliInfo)*MAX_CLIENTS, IPC_CREAT | 0666);
+    if (shmid < 0)
+    {
+        err_dump("Init shared memory error");
+    }
+
+    if((shmdata = (CliInfo*)shmat(shmid, NULL, 0)) < 0)
+    {
+        err_dump("Init shared memory error");
+    }
+
+    int i;
+    for (i = 0; i < MAX_CLIENTS; i++)
+    {
+        shmdata[i].uid = -1;
+        shmdata[i].pid = -1;
+    }
+}
+
+void commuto_client()
+{
+    char msg[MAX_MSG_LEN];
+    sprintf(msg, "\n*** User '%s' entered from %s/%d. ***\n% ",shmdata[uid].name, shmdata[uid].ip, shmdata[uid].port);
+    yell(msg);
+    send_welmsg(clifd);
+    recv_cli_cmd(clifd);
+}
+
+
+void showshm()
+{
+    int i;
+    for(i = 0;i<MAX_CLIENTS;i++)
+    {
+        fprintf(stderr, "uid:%d, pid:%d, name:%s\n",shmdata[i].uid, shmdata[i].pid, shmdata[i].name);
+    }
+}
+
 
 /*
  * start socket, fork when accept client connection
@@ -108,7 +170,7 @@ int start_server()
             else                     /* Second Child Process */
             {
                 close(sockfd);    /* close sockfd in child process, we only need clifd to communicate with client */
-                sleep(1);
+                uid = client_init(cli_addr.sin_addr, cli_addr.sin_port);
                 return clifd;    /* return clifd to main function to execute next function */
             }
         }
@@ -119,6 +181,39 @@ int start_server()
         }
     }
     return -1;
+}
+
+int client_init(struct in_addr in, unsigned short in_port)
+{
+    int i;
+    for (i = 1; i < MAX_CLIENTS; i++)
+    {
+        if (shmdata[i].pid == -1)
+        {
+            char *ip_tmp;
+            shmdata[i].pid = getpid();
+            shmdata[i].uid = i;
+            ip_tmp = inet_ntoa(in);
+            strcpy(shmdata[i].ip, ip_tmp);
+            shmdata[i].port = ntohs(in_port);
+            strcpy(shmdata[i].name, "(no name)");
+            break;
+        }
+    }
+
+    return i;
+}
+
+void clean_cli(int uid,int shmid)
+{
+    char msg[MAX_MSG_LEN];
+    sprintf(msg, "\n*** User '%s' leaved from %s/%d. ***\n", shmdata[uid].name, shmdata[uid].ip, shmdata[uid].port);
+    yell(msg);
+    shmdata[uid].pid = -1;
+    shmdata[uid].uid = -1;
+    strcpy(shmdata[uid].msg, " ");
+    shmdt(shmdata);
+    shmctl(shmid, IPC_RMID, NULL);
 }
 
 /*
@@ -170,6 +265,7 @@ void recv_cli_cmd(int clifd)
                 free_lists(headnode);
                 shutdown(clifd, SHUT_RDWR);
                 close(clifd);
+                clean_cli(uid, shmid);
                 exit(0);
             }
 
@@ -241,7 +337,7 @@ void create_linenode(char* line, int pipetonum)
 
     if(curnode->nextPtr == NULL)    /* curnode equal to tailnode, is at the end of list, so we make new node for incoming cmdline */
     {
-        linenode* newnode = create_node(linecount++,linecopy,pipetonum);
+        LineNode* newnode = create_node(linecount++,linecopy,pipetonum);
         insert_node(tailnode, newnode);
         tailnode = tailnode->nextPtr;
         curnode = curnode->nextPtr;
@@ -263,7 +359,7 @@ void create_linenode(char* line, int pipetonum)
 
         while(stillneed > 0)
         {
-            linenode* newnode = create_node(linecount++, NULL, 0);
+            LineNode* newnode = create_node(linecount++, NULL, 0);
             insert_node(tailnode, newnode);
             tailnode = tailnode->nextPtr;
             stillneed--;
@@ -414,7 +510,7 @@ void execute_cmdline(char ***argvs)
         }
         else if(C == cmd_count-1 && curnode->pipeto != 0)    /* cmd is at the end of line, but pipe to later line */
         {
-            linenode* tmpnode = curnode;
+            LineNode* tmpnode = curnode;
             while(tmpnode->linenum != curnode->linenum + curnode->pipeto)    /* find the node of line we want to pipe to */
             {
                 tmpnode = tmpnode->nextPtr;
@@ -589,4 +685,24 @@ char ***parse_cmd_seq(char *str)
     }
 
     return argvs;
+}
+
+void yell(char* msg)
+{
+    int i;
+    for (i = 0; i < MAX_CLIENTS; i++)
+    {
+        if(shmdata[i].pid != -1)
+        {
+            strcpy(shmdata[i].msg, msg);
+            kill(shmdata[i].pid, SIGALRM);
+        }
+    }
+}
+
+
+void err_dump(char *string)
+{
+    fprintf(stderr, "%s\n", string);
+    exit(EXIT_FAILURE);
 }

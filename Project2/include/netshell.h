@@ -8,10 +8,10 @@
 #include <sys/stat.h>
 #include <string.h>
 #include <netinet/in.h>
+#include <arpa/inet.h>
 #include <unistd.h>
 #include <regex.h>
 #include <fcntl.h>
-#include "li3.h"
 
 #define ANSI_COLOR_RED     "\x1b[31m"
 #define ANSI_COLOR_GREEN   "\x1b[32m"
@@ -35,6 +35,7 @@
 
 void err_dump(char *);
 int start_server();
+void commuto_client();
 void send_welmsg(int);
 void recv_cli_cmd(int);
 void create_linenode(char *,int);
