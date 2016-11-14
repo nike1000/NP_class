@@ -46,4 +46,8 @@ int get_endnum(char *);
 char ***parse_cmd_seq(char *);
 void execute_cmdline(char ***);
 void creat_proc(char **argv, int fd_in, int fd_out, int fd_err, int pipes_count, int pipes_fd[][2]);
+void who();
+void name(char*);
+void yell(char*);
+void tell(char*, int);
 #endif

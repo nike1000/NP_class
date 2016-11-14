@@ -81,9 +81,9 @@ void initshm()
 void commuto_client()
 {
     char msg[MAX_MSG_LEN];
-    sprintf(msg, "\n*** User '%s' entered from %s/%d. ***\n% ",shmdata[uid].name, shmdata[uid].ip, shmdata[uid].port);
-    yell(msg);
     send_welmsg(clifd);
+    sprintf(msg, "*** User '%s' entered from %s/%d. ***\n% ",shmdata[uid].name, shmdata[uid].ip, shmdata[uid].port);
+    yell(msg);
     recv_cli_cmd(clifd);
 }
 
@@ -207,7 +207,7 @@ int client_init(struct in_addr in, unsigned short in_port)
 void clean_cli(int uid,int shmid)
 {
     char msg[MAX_MSG_LEN];
-    sprintf(msg, "\n*** User '%s' leaved from %s/%d. ***\n", shmdata[uid].name, shmdata[uid].ip, shmdata[uid].port);
+    sprintf(msg, "*** User '%s' left. ***\n", shmdata[uid].name);
     yell(msg);
     shmdata[uid].pid = -1;
     shmdata[uid].uid = -1;
@@ -260,7 +260,7 @@ void recv_cli_cmd(int clifd)
         {
             line = rm_fespace(line);    /* to catch |N in the end of line, we remove all space at the end */
 
-            if(strcmp(line,"exit")==0)
+            if(reg_match("^(exit)", line))
             {
                 free_lists(headnode);
                 shutdown(clifd, SHUT_RDWR);
@@ -268,58 +268,80 @@ void recv_cli_cmd(int clifd)
                 clean_cli(uid, shmid);
                 exit(0);
             }
-
-            int is_setenv = reg_match("^(setenv)", line);    /* setenv */
-            int is_printenv = reg_match("^(printenv)", line);    /* printenv */
-            if(is_setenv||is_printenv)
+            else if(reg_match("^(who)", line))
             {
-                // not pipe or redirect, do all by self
+                create_linenode(line, 0);
+                who();
+            }
+            else if(reg_match("^(name)", line))
+            {
+                create_linenode(line, 0);
+                char* newname = line+5;    /* 5 offset of char to skip cmd 'name' and a space at beginning of line */
+                name(newname);
+            }
+            else if(reg_match("^(yell)", line))
+            {
+                create_linenode(line, 0);
+                char buf[MAX_MSG_LEN];
+                char* msg = line+5;    /* 5 offset of char to skip cmd 'yell' and a space at beginning of line */
+                sprintf(buf, "*** %s yelled ***: %s\n", shmdata[uid].name, msg);
+                yell(buf);
+            }
+            else if(reg_match("^(tell)", line))
+            {
+                create_linenode(line, 0);
+                char buf[MAX_MSG_LEN], tmp[MAX_MSG_LEN];
+                strcpy(tmp,line);
+
+                char ***argvs = parse_cmd_seq(line);
+                int touid = atoi(argvs[0][1]);
+                char *msg = tmp+strlen(argvs[0][0])+strlen(argvs[0][1])+2;    /* offset of char to skip cmd 'tell' ,touid and two spaces at beginning of line */
+                sprintf(buf, "*** %s told you ***: %s\n", shmdata[uid].name, msg);
+                tell(buf, touid);
+            }
+            else if(reg_match("^(setenv)", line))
+            {
                 create_linenode(line, 0);
                 char ***argvs = parse_cmd_seq(line);
-                if(is_setenv)
-                {
-                    setenv(argvs[0][1],argvs[0][2],1);
-                }
-                else if(is_printenv)
-                {
-                    char *env = getenv(argvs[0][1]);
-                    char *envstr =  malloc(snprintf(NULL, 0, "%s=%s\n", argvs[0][1], env) + 1);
-                    sprintf(envstr, "%s=%s\n", argvs[0][1], env);
-                    write(clifd, envstr, sizeof(char)*strlen(envstr));
-                }
-                line = strtok(NULL, delim);
-                continue;
+                setenv(argvs[0][1],argvs[0][2],1);
             }
-
-            int is_tofile = reg_match(">[ ]*[^\\|/]+$", line);    /* match > to file at the end of line */
-            if(is_tofile)
+            else if(reg_match("^(printenv)", line))
+            {
+                create_linenode(line, 0);
+                char ***argvs = parse_cmd_seq(line);
+                char *env = getenv(argvs[0][1]);
+                char *envstr =  malloc(snprintf(NULL, 0, "%s=%s\n", argvs[0][1], env) + 1);
+                sprintf(envstr, "%s=%s\n", argvs[0][1], env);
+                write(clifd, envstr, sizeof(char)*strlen(envstr));
+            }
+            else if(reg_match(">[ ]*[^\\|/]+$", line))    /* match > to file at the end of line */
             {
                 create_linenode(line, 0);
                 curnode->filename = rm_fespace(get_filename(line));
                 execute_cmdline(parse_cmd_seq(line));
                 line = strtok(NULL, delim);
-                continue;
-            }
-
-            int pipe_err = reg_match("![1-9][0-9]*$", line);    /* match !N at the end of line */
-            int pipe_out = reg_match("\\|[1-9][0-9]*$", line);  /* match |N at the end of line */
-
-            if(!pipe_err && !pipe_out)
-            {
-                create_linenode(line, 0);    /* xxx | yyy | zzz  */
             }
             else
             {
-                create_linenode(line, get_endnum(line));
-                if(pipe_err)
+                int pipe_err = reg_match("![1-9][0-9]*$", line);    /* match !N at the end of line */
+                int pipe_out = reg_match("\\|[1-9][0-9]*$", line);  /* match |N at the end of line */
+
+                if(!pipe_err && !pipe_out)
                 {
-                    curnode->pipe_err = 1;
+                    create_linenode(line, 0);    /* xxx | yyy | zzz  */
                 }
+                else
+                {
+                    create_linenode(line, get_endnum(line));
+                    if(pipe_err)
+                    {
+                        curnode->pipe_err = 1;
+                    }
+                }
+                execute_cmdline(parse_cmd_seq(line));
             }
 
             //print_lists(headnode);
-
-            execute_cmdline(parse_cmd_seq(line));
 
             line = strtok(NULL, delim);
         }while(line);// strtok return NULL when , NULL pointer is false
@@ -331,7 +353,6 @@ void recv_cli_cmd(int clifd)
  * */
 void create_linenode(char* line, int pipetonum)
 {
-
     char *linecopy = malloc(sizeof(char)*strlen(line));
     strcpy(linecopy,line);    /* copy string to store in linelinklist, if use line ,it will be change because of pointer, linecmd of each node will same as last node */
 
@@ -686,6 +707,49 @@ char ***parse_cmd_seq(char *str)
 
     return argvs;
 }
+
+void who()
+{
+    char msg[1024];
+    strcpy(msg, "<sockd>   <nickname>               <IP/port>               <indicate me>\n");
+    write(clifd, msg, strlen(msg));
+
+    int i;
+    for(i = 1; i < MAX_CLIENTS; ++i)
+    {
+        if(shmdata[i].uid != -1)
+        {
+            if(shmdata[i].uid == uid)
+            {
+                sprintf(msg, "%-10d%-25s%-s/%-8d<--me\n", shmdata[i].uid, shmdata[i].name, shmdata[i].ip, shmdata[i].port);
+            }
+            else
+            {
+                sprintf(msg, "%-10d%-25s%-s/%-8d\n", shmdata[i].uid, shmdata[i].name, shmdata[i].ip, shmdata[i].port);
+            }
+            write(clifd, msg, strlen(msg));
+        }
+    }
+}
+
+void name(char* newname)
+{
+    char msg[MAX_MSG_LEN];
+    strcpy(shmdata[uid].name, newname);
+
+    sprintf(msg, "*** User from %s/%d is named '%s'. ***\n", shmdata[uid].ip, shmdata[uid].port, shmdata[uid].name);
+    yell(msg);
+}
+
+void tell(char* msg, int touid)
+{
+    if(shmdata[touid].pid != -1)
+    {
+        strcpy(shmdata[touid].msg, msg);
+        kill(shmdata[touid].pid, SIGALRM);
+    }
+}
+
 
 void yell(char* msg)
 {
