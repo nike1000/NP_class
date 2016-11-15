@@ -12,6 +12,7 @@
 #include <unistd.h>
 #include <regex.h>
 #include <fcntl.h>
+#include <errno.h>
 
 #define ANSI_COLOR_RED     "\x1b[31m"
 #define ANSI_COLOR_GREEN   "\x1b[32m"
@@ -36,6 +37,7 @@
 void err_dump(char *);
 int start_server();
 void commuto_client();
+void clean_cli(int, int);
 void send_welmsg(int);
 void recv_cli_cmd(int);
 void create_linenode(char *,int);
@@ -46,8 +48,4 @@ int get_endnum(char *);
 char ***parse_cmd_seq(char *);
 void execute_cmdline(char ***);
 void creat_proc(char **argv, int fd_in, int fd_out, int fd_err, int pipes_count, int pipes_fd[][2]);
-void who();
-void name(char*);
-void yell(char*);
-void tell(char*, int);
 #endif

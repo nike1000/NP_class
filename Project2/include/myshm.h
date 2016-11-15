@@ -10,10 +10,13 @@
 #define MAX_MSG_LEN 1024
 
 void initshm();
-void showshm();
-void sigHandler(int);
+void sigMsg(int);
+void sigPipe(int);
 int client_init(struct in_addr in, unsigned short in_port);
+void who();
+void name(char*);
 void yell(char*);
+void tell(char*, int);
 
 typedef struct CliInfo
 {
@@ -23,6 +26,7 @@ typedef struct CliInfo
     char msg[MAX_MSG_LEN];
     char ip[20];
     unsigned short port;
+    int fifofd[MAX_CLIENTS];
 }CliInfo;
 
 #endif

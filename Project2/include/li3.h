@@ -8,12 +8,13 @@ typedef struct LineNode
 {
     int linenum;
     char* cmdline;
-    int pipeto;
-    int pipe_err;
-    int fd_tofile;
-    char* filename;
-    int fd_readout;
-    int fd_writein;
+    int pipeto;      /* recode number after this line to pipe  */
+    int pipe_err;    /* boolean, pipe stderr with stdout or not */
+    int fd_tofile;   /* fd point to the file this line redirect to */
+    char* filename;  /* file name of redirect */
+    int is_fifofile; /* boolean, whether the filename is a namepipe file */
+    int fd_readout;  /* fd, previous pipe/namepipe to this line, readout end for this line to read */
+    int fd_writein;  /* fd, previous pipe to this line, writein end for previous line to write */
     struct LineNode* nextPtr;
 }LineNode;
 

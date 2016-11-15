@@ -19,7 +19,8 @@ int main()
     curnode = headnode;
     tailnode = headnode;
 
-    signal(SIGALRM, sigHandler);
+    signal(SIGALRM, sigMsg);    /* receive tell or yell msg */
+    signal(SIGPIPE, sigPipe);   /* open fifo for read, avoid write end block or open error with O_NONBLOCK */
 
     initshm();   /* allocate shared memory and attach shared memory by shmget and shmat function */
 
@@ -46,17 +47,37 @@ int main()
  * and send a signal to other client.
  * So, when process get an signal, write the msg to clifd
  * */
-void sigHandler(int sig)
+void sigMsg(int sig)
 {
     write(clifd, shmdata[uid].msg, strlen(shmdata[uid].msg));
     strcpy(shmdata[uid].msg, " ");
 }
 
+
+/*
+ * open fifo for write will block until that fifo have open for read by default,
+ * if open fifo for write with O_NONBLOCK flags, open for write will get ENXIO error without read end,
+ * so after we create fifo, but before write, we send signal to receiver to open fifo for read avoid block
+ * */
+void sigPipe(int sig)
+{
+    int i;
+    char fifoname[8];
+    for(i=0; i<MAX_CLIENTS; i++)
+    {
+        sprintf(fifoname, ".%dto%d", i, uid);
+        if(access(fifoname,F_OK) == 0 && shmdata[uid].fifofd[i] == -1)
+        {
+            shmdata[uid].fifofd[i] = open(fifoname, O_RDONLY|O_NONBLOCK);
+        }
+    }
+}
+
+
 /*
  * get shared memory to store client info in CliInfo struct,
  * attech shared memory and init uid and pid for CliInfo inshm
  * */
-
 void initshm()
 {
     shmid = shmget(SHMKEY, sizeof(CliInfo)*MAX_CLIENTS, IPC_CREAT | 0666);
@@ -75,25 +96,12 @@ void initshm()
     {
         shmdata[i].uid = -1;
         shmdata[i].pid = -1;
-    }
-}
 
-void commuto_client()
-{
-    char msg[MAX_MSG_LEN];
-    send_welmsg(clifd);
-    sprintf(msg, "*** User '%s' entered from %s/%d. ***\n% ",shmdata[uid].name, shmdata[uid].ip, shmdata[uid].port);
-    yell(msg);
-    recv_cli_cmd(clifd);
-}
-
-
-void showshm()
-{
-    int i;
-    for(i = 0;i<MAX_CLIENTS;i++)
-    {
-        fprintf(stderr, "uid:%d, pid:%d, name:%s\n",shmdata[i].uid, shmdata[i].pid, shmdata[i].name);
+        int j;
+        for(j = 0; j < MAX_CLIENTS; j++)
+        {
+            shmdata[i].fifofd[j] = -1;
+        }
     }
 }
 
@@ -183,6 +191,10 @@ int start_server()
     return -1;
 }
 
+
+/*
+ * set client uid, pid, default name in shared memory
+ * */
 int client_init(struct in_addr in, unsigned short in_port)
 {
     int i;
@@ -200,21 +212,22 @@ int client_init(struct in_addr in, unsigned short in_port)
             break;
         }
     }
-
     return i;
 }
 
-void clean_cli(int uid,int shmid)
+
+void commuto_client()
 {
     char msg[MAX_MSG_LEN];
+    send_welmsg(clifd);
+    sprintf(msg, "*** User '%s' entered from %s/%d. ***\n% ",shmdata[uid].name, shmdata[uid].ip, shmdata[uid].port);
+    yell(msg);
+    recv_cli_cmd(clifd);    /* for loop to receive cmd from client */
     sprintf(msg, "*** User '%s' left. ***\n", shmdata[uid].name);
     yell(msg);
-    shmdata[uid].pid = -1;
-    shmdata[uid].uid = -1;
-    strcpy(shmdata[uid].msg, " ");
-    shmdt(shmdata);
-    shmctl(shmid, IPC_RMID, NULL);
+    clean_cli(uid, shmid);
 }
+
 
 /*
  * send a colorful welcome message to client
@@ -226,6 +239,40 @@ void send_welmsg(int clifd)
     sprintf(buffer, "%s%s%s", colors[getpid() % 6], WELCOME_MSG, ANSI_COLOR_RESET);    /* different colors of welcome message for client */
     write(clifd, buffer, strlen(buffer));    /* write welcome message to client */
 }
+
+/*
+ * clean data when client exit
+ * */
+void clean_cli(int uid,int shmid)
+{
+    shmdata[uid].pid = -1;
+    shmdata[uid].uid = -1;
+
+    int i;
+    for(i = 0;i < MAX_CLIENTS; i++)
+    {
+        if(shmdata[uid].fifofd[i] != -1)
+        {
+            close(shmdata[uid].fifofd[i]);    /* close fd for fifo read */
+            shmdata[uid].fifofd[i] = -1;      /* reset fifofd to -1 */
+
+            char fifoname[8];
+            sprintf(fifoname, ".%dto%d", i, uid);
+            if(access(fifoname,F_OK) == 0)
+            {
+                unlink(fifoname);             /* remove fifo file */
+            }
+        }
+    }
+
+    strcpy(shmdata[uid].msg, " ");
+    shmdt(shmdata);
+    shmctl(shmid, IPC_RMID, NULL);
+    free_lists(headnode);
+    shutdown(clifd, SHUT_RDWR);
+    close(clifd);
+}
+
 
 /*
  * receive line from client, store line to LineLinkedList, then parse command from line and execute command with pipe
@@ -262,11 +309,7 @@ void recv_cli_cmd(int clifd)
 
             if(reg_match("^(exit)", line))
             {
-                free_lists(headnode);
-                shutdown(clifd, SHUT_RDWR);
-                close(clifd);
-                clean_cli(uid, shmid);
-                exit(0);
+                return;
             }
             else if(reg_match("^(who)", line))
             {
@@ -314,12 +357,71 @@ void recv_cli_cmd(int clifd)
                 sprintf(envstr, "%s=%s\n", argvs[0][1], env);
                 write(clifd, envstr, sizeof(char)*strlen(envstr));
             }
+            else if(reg_match(">[1-9][0-9]*$", line))
+            {
+                create_linenode(line, 0);
+                int pipetouid = get_endnum(line);
+                char fifoname[8], msg[MAX_MSG_LEN];
+
+                if(shmdata[pipetouid].uid == -1)
+                {
+                    sprintf(msg, "*** Error: user #%d does not exist yet. ***\n", pipetouid);
+                    write(clifd, msg, strlen(msg));
+                }
+                else
+                {
+                    sprintf(fifoname, ".%dto%d", uid, pipetouid);
+                    int status = mknod(fifoname, S_IFIFO|0666, 0);
+                    if(status)
+                    {
+                        if(errno == EEXIST)
+                        {
+                            sprintf(msg, "*** Error: the pipe #%d->#%d already exists. ***\n", uid, pipetouid);
+                            write(clifd, msg, strlen(msg));
+                        }
+                        else
+                        {
+                            err_dump("FIFO create fail.");
+                        }
+                    }
+                    else
+                    {
+                        kill(shmdata[pipetouid].pid, SIGPIPE);
+                        curnode->filename = fifoname;
+                        curnode->is_fifofile = 1;
+                        sprintf(msg, "*** %s (#%d) just piped '%s' to %s (#%d) ***\n", shmdata[uid].name, uid, curnode->cmdline, shmdata[pipetouid].name, pipetouid);
+                        yell(msg);
+                        execute_cmdline(parse_cmd_seq(line));
+                    }
+                }
+            }
+            else if(reg_match("<[1-9][0-9]*$", line))
+            {
+                create_linenode(line, 0);
+                int pipefromuid = get_endnum(line);
+                char fifoname[8], msg[MAX_MSG_LEN];
+
+                if(shmdata[uid].fifofd[pipefromuid] == -1)
+                {
+                    sprintf(msg, "*** Error: the pipe #%d->#%d does not exist yet. ***\n", pipefromuid, uid);
+                    write(clifd, msg, strlen(msg));
+                }
+                else
+                {
+                    curnode->fd_readout = shmdata[uid].fifofd[pipefromuid];
+                    execute_cmdline(parse_cmd_seq(line));
+                    sprintf(msg, "*** %s (#%d) just received from %s (#%d) by '%s' ***\n", shmdata[uid].name, uid, shmdata[pipefromuid].name, pipefromuid, curnode->cmdline);
+                    yell(msg);
+                    shmdata[uid].fifofd[pipefromuid] = -1;
+                    sprintf(fifoname, ".%dto%d", pipefromuid, uid);
+                    unlink(fifoname);
+                }
+            }
             else if(reg_match(">[ ]*[^\\|/]+$", line))    /* match > to file at the end of line */
             {
                 create_linenode(line, 0);
                 curnode->filename = rm_fespace(get_filename(line));
                 execute_cmdline(parse_cmd_seq(line));
-                line = strtok(NULL, delim);
             }
             else
             {
@@ -461,6 +563,7 @@ char* get_filename(char* line)
     return filename;
 }
 
+
 /*
  * check whether tje end of line is legal, get |N number at the end of line, then remove it from line
  * */
@@ -522,7 +625,14 @@ void execute_cmdline(char ***argvs)
 
         if(C == cmd_count-1 && curnode->filename != NULL)
         {
-            curnode->fd_tofile = open(curnode->filename, O_RDWR|O_CREAT|O_TRUNC, S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP|S_IROTH|S_IROTH);
+            if(curnode->is_fifofile)    /* to fife file */
+            {
+                curnode->fd_tofile = open(curnode->filename, O_WRONLY);
+            }
+            else    /* to regular file */
+            {
+                curnode->fd_tofile = open(curnode->filename, O_RDWR|O_CREAT|O_TRUNC, S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP|S_IROTH|S_IROTH);
+            }
             fd_out = curnode->fd_tofile;
         }
         else if(C == cmd_count-1 && curnode->pipeto == 0)    /* cmd is at the end of line, and no pipe to later line */
@@ -578,6 +688,11 @@ void execute_cmdline(char ***argvs)
             close(fd_out);
         }
 
+        if(C == 0 && curnode->fd_readout >= 0)
+        {
+            close(curnode->fd_readout);
+        }
+
         if(C != 0)    /* close fd_in but avoid first cmd, don't close STDIN_FILENO */
         {
             close(fd_in);
@@ -585,6 +700,14 @@ void execute_cmdline(char ***argvs)
 
         int stat;
         wait(&stat);    /* wait for the client who call exec to run cmd, avoid child become zombie */
+
+        if(WIFEXITED(stat))    /* if occur Unknown command, give up other cmds after this in the same line */
+        {
+            if(WEXITSTATUS(stat) == EXIT_FAILURE)
+            {
+                break;
+            }
+        }
     }
 }
 
@@ -711,7 +834,7 @@ char ***parse_cmd_seq(char *str)
 void who()
 {
     char msg[1024];
-    strcpy(msg, "<sockd>   <nickname>               <IP/port>               <indicate me>\n");
+    strcpy(msg, "<ID>      <nickname>               <IP/port>               <indicate me>\n");
     write(clifd, msg, strlen(msg));
 
     int i;
@@ -721,7 +844,7 @@ void who()
         {
             if(shmdata[i].uid == uid)
             {
-                sprintf(msg, "%-10d%-25s%-s/%-8d<--me\n", shmdata[i].uid, shmdata[i].name, shmdata[i].ip, shmdata[i].port);
+                sprintf(msg, "%-10d%-25s%-s/%-8d<-me\n", shmdata[i].uid, shmdata[i].name, shmdata[i].ip, shmdata[i].port);
             }
             else
             {
@@ -734,11 +857,29 @@ void who()
 
 void name(char* newname)
 {
+    int i, exist = 0;
     char msg[MAX_MSG_LEN];
-    strcpy(shmdata[uid].name, newname);
 
-    sprintf(msg, "*** User from %s/%d is named '%s'. ***\n", shmdata[uid].ip, shmdata[uid].port, shmdata[uid].name);
-    yell(msg);
+    for(i = 0; i < MAX_CLIENTS; i++)
+    {
+        if(strcmp(newname, shmdata[i].name)==0)
+        {
+            exist = 1;
+            break;
+        }
+    }
+
+    if(exist)
+    {
+        sprintf(msg, "*** User '%s' already exists. ***\n", newname);
+        write(clifd, msg, strlen(msg));
+    }
+    else
+    {
+        strcpy(shmdata[uid].name, newname);
+        sprintf(msg, "*** User from %s/%d is named '%s'. ***\n", shmdata[uid].ip, shmdata[uid].port, shmdata[uid].name);
+        yell(msg);
+    }
 }
 
 void tell(char* msg, int touid)
@@ -747,6 +888,12 @@ void tell(char* msg, int touid)
     {
         strcpy(shmdata[touid].msg, msg);
         kill(shmdata[touid].pid, SIGALRM);
+    }
+    else
+    {
+        char msg[MAX_MSG_LEN];
+        sprintf(msg, "*** Error: user #%d does not exist yet. ***\n", touid);
+        write(clifd, msg, strlen(msg));
     }
 }
 
