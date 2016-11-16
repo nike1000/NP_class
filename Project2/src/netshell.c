@@ -10,6 +10,8 @@ int linecount = 1;
 int shmid;
 int uid;
 CliInfo* shmdata;
+int sbchk_flag = 0;
+int sb_data = -1;
 
 int main()
 {
@@ -412,6 +414,16 @@ void recv_cli_cmd(int clifd)
                 execute_cmdline(parse_cmd_seq(line));
             }
 
+            if(sbchk_flag == 2)
+            {
+                char msg[MAX_MSG_LEN],fifoname[8];
+                sprintf(msg, "*** %s (#%d) just received from %s (#%d) by '%s' ***\n", shmdata[uid].name, uid, shmdata[sb_data].name, sb_data, curnode->cmdline);
+                yell(msg);
+                shmdata[uid].fifofd[sb_data] = -1;
+                sprintf(fifoname, ".%dto%d", sb_data, uid);
+                unlink(fifoname);
+            }
+            sb_data = -1;
             //print_lists(headnode);
 
             line = strtok(NULL, delim);
@@ -562,8 +574,21 @@ void execute_cmdline(char ***argvs)
         ++cmd_count;
     }
 
-    /*int len=sizeof(argvs[0])/sizeof(*argvs[0]);*/
-    /*symbol_chk(argvs[0],size);*/
+    int len = 0;
+    while(argvs[0][len])
+    {
+        ++len;
+    }
+    sbchk_flag = symbol_chk(argvs[0],len-1);
+
+    if(sbchk_flag > 0)
+    {
+        argvs[0][len-1] = NULL;
+    }
+    if(sbchk_flag == 3)
+    {
+        argvs[0][len-2] = NULL;
+    }
 
     int pipes_fd[cmd_count][2];    /* prepare pipe fd ,read from [0], write to [1] , there are MAX_CMD_COUNT fd group, but last one not always used */
 
@@ -689,27 +714,55 @@ void execute_cmdline(char ***argvs)
     }
 }
 
-void symbol_chk(char** fircmd, int len)
+int symbol_chk(char** fircmd, int len)
 {
+    char buf[MAX_MSG_LEN];
+    sprintf(buf, "%s %s", fircmd[len-1], fircmd[len]);
     if(reg_match(">[1-9][0-9]*$", fircmd[len]))
     {
-    
+        int pipetouid = get_endnum(fircmd[len]);
+        char* fifoname=malloc(sizeof (char)*8);
+        sprintf(fifoname, ".%dto%d", uid, pipetouid);
+        if(pipe_to_user(pipetouid,fifoname))
+        {
+            curnode->filename = fifoname;
+            curnode->is_fifofile = 1;
+        }
+        return 1;
     }
     else if(reg_match("<[1-9][0-9]*$", fircmd[len]))
     {
-    
+        int pipefromuid = get_endnum(fircmd[len]);
+        char* fifoname=malloc(sizeof (char)*8);
+        sprintf(fifoname, ".%dto%d", pipefromuid, uid);
+        if(pipe_from_user(pipefromuid, fifoname))
+        {
+            sb_data = pipefromuid;
+            return 2;
+        }
     }
-    else if(reg_match(">[ ]*[^\\|/]+$", fircmd[len]))
+    else if(reg_match("> [^\\|/]+$", buf))
     {
-    
+        curnode->filename = fircmd[len];
+        return 3;
     }
-    else if(reg_match("![1-9][0-9]*$", fircmd[len]), reg_match("\\|[1-9][0-9]*$", fircmd[len]))
-    {
-    
-    }
+    /*else if(reg_match("![1-9][0-9]*$", fircmd[len]) || reg_match("\\|[1-9][0-9]*$", fircmd[len]))*/
+    /*{*/
+        /*print_lists(headnode);*/
+        /*LineNode* tmp = curnode;*/
+        /*create_linenode("", 0);*/
+        /*curnode = tmp;*/
+        /*curnode->pipeto = get_endnum(fircmd[len])-1;*/
+
+        /*if(reg_match("![1-9][0-9]*$", fircmd[len]))*/
+        /*{*/
+            /*curnode->pipe_err = 1;*/
+        /*}*/
+        /*return 1;*/
+    /*}*/
     else
     {
-    
+        return 0;
     }
 }
 
