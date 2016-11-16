@@ -322,25 +322,37 @@ void recv_cli_cmd(int clifd)
             {
                 create_linenode(line, 0);
                 char* newname = line+5;    /* 5 offset of char to skip cmd 'name' and a space at beginning of line */
+                if(strlen(newname) > 20)
+                {
+                    newname[20] = 0;
+                }
                 name(newname);
             }
             else if(reg_match("^(yell)", line))
             {
                 create_linenode(line, 0);
-                char buf[MAX_MSG_LEN];
+                char buf[MAX_MSG_LEN+50];
                 char* msg = line+5;    /* 5 offset of char to skip cmd 'yell' and a space at beginning of line */
+                if(strlen(msg) > MAX_MSG_LEN)
+                {
+                    msg[MAX_MSG_LEN] = 0;
+                }
                 sprintf(buf, "*** %s yelled ***: %s\n", shmdata[uid].name, msg);
                 yell(buf);
             }
             else if(reg_match("^(tell)", line))
             {
                 create_linenode(line, 0);
-                char buf[MAX_MSG_LEN], tmp[MAX_MSG_LEN];
+                char buf[MAX_MSG_LEN+50], tmp[MAX_MSG_LEN+50];
                 strcpy(tmp,line);
 
                 char ***argvs = parse_cmd_seq(line);
                 int touid = atoi(argvs[0][1]);
                 char *msg = tmp+strlen(argvs[0][0])+strlen(argvs[0][1])+2;    /* offset of char to skip cmd 'tell' ,touid and two spaces at beginning of line */
+                if(strlen(msg) > MAX_MSG_LEN)
+                {
+                    msg[MAX_MSG_LEN] = 0;
+                }
                 sprintf(buf, "*** %s told you ***: %s\n", shmdata[uid].name, msg);
                 tell(buf, touid);
             }
