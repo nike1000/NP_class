@@ -361,38 +361,13 @@ void recv_cli_cmd(int clifd)
             {
                 create_linenode(line, 0);
                 int pipetouid = get_endnum(line);
-                char fifoname[8], msg[MAX_MSG_LEN];
-
-                if(shmdata[pipetouid].uid == -1)
+                char fifoname[8];
+                sprintf(fifoname, ".%dto%d", uid, pipetouid);
+                if(pipe_to_user(pipetouid,fifoname))
                 {
-                    sprintf(msg, "*** Error: user #%d does not exist yet. ***\n", pipetouid);
-                    write(clifd, msg, strlen(msg));
-                }
-                else
-                {
-                    sprintf(fifoname, ".%dto%d", uid, pipetouid);
-                    int status = mknod(fifoname, S_IFIFO|0666, 0);
-                    if(status)
-                    {
-                        if(errno == EEXIST)
-                        {
-                            sprintf(msg, "*** Error: the pipe #%d->#%d already exists. ***\n", uid, pipetouid);
-                            write(clifd, msg, strlen(msg));
-                        }
-                        else
-                        {
-                            err_dump("FIFO create fail.");
-                        }
-                    }
-                    else
-                    {
-                        kill(shmdata[pipetouid].pid, SIGPIPE);
-                        curnode->filename = fifoname;
-                        curnode->is_fifofile = 1;
-                        sprintf(msg, "*** %s (#%d) just piped '%s' to %s (#%d) ***\n", shmdata[uid].name, uid, curnode->cmdline, shmdata[pipetouid].name, pipetouid);
-                        yell(msg);
-                        execute_cmdline(parse_cmd_seq(line));
-                    }
+                    curnode->filename = fifoname;
+                    curnode->is_fifofile = 1;
+                    execute_cmdline(parse_cmd_seq(line));
                 }
             }
             else if(reg_match("<[1-9][0-9]*$", line))
@@ -400,21 +375,15 @@ void recv_cli_cmd(int clifd)
                 create_linenode(line, 0);
                 int pipefromuid = get_endnum(line);
                 char fifoname[8], msg[MAX_MSG_LEN];
-
-                if(shmdata[uid].fifofd[pipefromuid] == -1)
+                sprintf(fifoname, ".%dto%d", pipefromuid, uid);
+                if(pipe_from_user(pipefromuid, fifoname))
                 {
-                    sprintf(msg, "*** Error: the pipe #%d->#%d does not exist yet. ***\n", pipefromuid, uid);
-                    write(clifd, msg, strlen(msg));
-                }
-                else
-                {
-                    curnode->fd_readout = shmdata[uid].fifofd[pipefromuid];
                     execute_cmdline(parse_cmd_seq(line));
                     sprintf(msg, "*** %s (#%d) just received from %s (#%d) by '%s' ***\n", shmdata[uid].name, uid, shmdata[pipefromuid].name, pipefromuid, curnode->cmdline);
                     yell(msg);
                     shmdata[uid].fifofd[pipefromuid] = -1;
                     sprintf(fifoname, ".%dto%d", pipefromuid, uid);
-                    unlink(fifoname);
+                    unlink(fifoname); 
                 }
             }
             else if(reg_match(">[ ]*[^\\|/]+$", line))    /* match > to file at the end of line */
@@ -593,6 +562,9 @@ void execute_cmdline(char ***argvs)
         ++cmd_count;
     }
 
+    /*int len=sizeof(argvs[0])/sizeof(*argvs[0]);*/
+    /*symbol_chk(argvs[0],size);*/
+
     int pipes_fd[cmd_count][2];    /* prepare pipe fd ,read from [0], write to [1] , there are MAX_CMD_COUNT fd group, but last one not always used */
 
     for (C = 0; C < cmd_count; ++C)
@@ -627,11 +599,17 @@ void execute_cmdline(char ***argvs)
         {
             if(curnode->is_fifofile)    /* to fife file */
             {
-                curnode->fd_tofile = open(curnode->filename, O_WRONLY);
+                if((curnode->fd_tofile = open(curnode->filename, O_WRONLY))==-1)
+                {
+                    err_dump(strerror(errno));
+                }
             }
             else    /* to regular file */
             {
-                curnode->fd_tofile = open(curnode->filename, O_RDWR|O_CREAT|O_TRUNC, S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP|S_IROTH|S_IROTH);
+                if((curnode->fd_tofile = open(curnode->filename, O_RDWR|O_CREAT|O_TRUNC, S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP|S_IROTH|S_IROTH))==-1)
+                {
+                    err_dump(strerror(errno));
+                }
             }
             fd_out = curnode->fd_tofile;
         }
@@ -708,6 +686,30 @@ void execute_cmdline(char ***argvs)
                 break;
             }
         }
+    }
+}
+
+void symbol_chk(char** fircmd, int len)
+{
+    if(reg_match(">[1-9][0-9]*$", fircmd[len]))
+    {
+    
+    }
+    else if(reg_match("<[1-9][0-9]*$", fircmd[len]))
+    {
+    
+    }
+    else if(reg_match(">[ ]*[^\\|/]+$", fircmd[len]))
+    {
+    
+    }
+    else if(reg_match("![1-9][0-9]*$", fircmd[len]), reg_match("\\|[1-9][0-9]*$", fircmd[len]))
+    {
+    
+    }
+    else
+    {
+    
     }
 }
 
@@ -909,6 +911,58 @@ void yell(char* msg)
             kill(shmdata[i].pid, SIGALRM);
         }
     }
+}
+
+
+int pipe_to_user(int touid,char *fifoname)
+{
+    char msg[MAX_MSG_LEN];
+    if(shmdata[touid].uid == -1)
+    {
+        sprintf(msg, "*** Error: user #%d does not exist yet. ***\n", touid);
+        write(clifd, msg, strlen(msg));
+    }
+    else
+    {
+        int status = mknod(fifoname, S_IFIFO|0666, 0);
+        if(status)
+        {
+            if(errno == EEXIST)
+            {
+                sprintf(msg, "*** Error: the pipe #%d->#%d already exists. ***\n", uid, touid);
+                write(clifd, msg, strlen(msg));
+            }
+            else
+            {
+                err_dump("FIFO create fail.");
+            }
+        }
+        else
+        {
+            kill(shmdata[touid].pid, SIGPIPE);
+            sprintf(msg, "*** %s (#%d) just piped '%s' to %s (#%d) ***\n", shmdata[uid].name, uid, curnode->cmdline, shmdata[touid].name, touid);
+            yell(msg);
+            return 1;
+        }
+    }
+    return 0;
+}
+
+
+int pipe_from_user(int fromuid,char *fifoname)
+{
+    char msg[MAX_MSG_LEN];
+    if(shmdata[uid].fifofd[fromuid] == -1)
+    {
+        sprintf(msg, "*** Error: the pipe #%d->#%d does not exist yet. ***\n", fromuid, uid);
+        write(clifd, msg, strlen(msg));
+    }
+    else
+    {
+        curnode->fd_readout = shmdata[uid].fifofd[fromuid];
+        return 1;
+    }
+    return 0;
 }
 
 

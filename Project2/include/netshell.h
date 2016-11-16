@@ -47,5 +47,7 @@ char* get_filename(char *);
 int get_endnum(char *);
 char ***parse_cmd_seq(char *);
 void execute_cmdline(char ***);
+int pipe_to_user(int, char*);
+int pipe_from_user(int fromuid,char *fifoname);
 void creat_proc(char **argv, int fd_in, int fd_out, int fd_err, int pipes_count, int pipes_fd[][2]);
 #endif
