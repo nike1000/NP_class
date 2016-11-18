@@ -381,6 +381,7 @@ void recv_cli_cmd(int clifd)
                 {
                     curnode->filename = fifoname;
                     curnode->is_fifofile = 1;
+                    curnode->pipe_err = 1;
                     execute_cmdline(parse_cmd_seq(line));
                 }
             }
