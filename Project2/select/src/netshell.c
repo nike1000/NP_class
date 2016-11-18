@@ -7,7 +7,9 @@ int linecount = 1;
 
 CliInfo clidata[MAX_CLIENTS];
 int uid;
-fd_set allfds;
+fd_set allfds;    /* set of fds */
+int sbchk_flag = 0;    /* recode type of second symbol */
+int sb_data = -1;      /* recode the data in symbol_chk */
 
 void err_dump(char *string)
 {
@@ -18,13 +20,9 @@ void err_dump(char *string)
 int main()
 {
     chdir("ras/");
-
     initdata();
-
     setenv("PATH", "bin:.", 1);
-
     start_server();
-
     return 0;
 }
 
@@ -51,12 +49,11 @@ void initdata()
 int start_server()
 {
     int sockfd, clifd;
-    int fpid;
     struct sockaddr_in serv_addr, cli_addr;
-
+    int maxfdnum;    /* recode the max fd in used now */
     fd_set readfds;
-    int maxfdnum;
 
+    /* clean FD set */
     FD_ZERO(&allfds);
     FD_ZERO(&readfds);
 
@@ -90,14 +87,14 @@ int start_server()
         err_dump("server: can't listen on socket");
     }
 
-    FD_SET(sockfd, &allfds);
+    FD_SET(sockfd, &allfds);    /* add sockfd in allfds set */
     maxfdnum = sockfd;
 
     while(1)
     {
-        readfds = allfds;
+        readfds = allfds;    /* select will change fd set, copy it */
 
-        if(select(maxfdnum+1, &readfds, NULL, NULL, (struct timeval*)0) < 0)
+        if(select(maxfdnum+1, &readfds, NULL, NULL, NULL) < 0)    /* no timeout, select will handout until some fd in readfds status change */
         {
             fprintf(stderr, "%s,%d\n", strerror(errno), maxfdnum);
             err_dump("select error");
@@ -106,12 +103,12 @@ int start_server()
         int fd;
         for(fd = 0; fd <= maxfdnum; fd++)
         {
-            if(FD_ISSET(fd, &readfds))    /*  */
+            if(FD_ISSET(fd, &readfds))    /* if fd is already been add to readfds set */
             {
                 if(fd == sockfd)    /* this fd is server socket fd, means new client incoming */
                 {
                     socklen_t clilen = sizeof(cli_addr);
-                    int clifd = accept(sockfd, (struct sockaddr *) &cli_addr, &clilen);    /* accept client connection */
+                    clifd = accept(sockfd, (struct sockaddr *) &cli_addr, &clilen);    /* accept client connection */
 
                     if(clifd == -1)
                     {
@@ -119,8 +116,8 @@ int start_server()
                     }
                     else
                     {
-                        FD_SET(clifd, &allfds);
-                        if(clifd > maxfdnum)
+                        FD_SET(clifd, &allfds);    /* add new client fd in allfds set */
+                        if(clifd > maxfdnum)       /* recheck max fd */
                         {
                             maxfdnum = clifd;
                         }
@@ -160,6 +157,7 @@ int start_server()
     return 0;
 }
 
+
 /*
  * set client uid, pid, default name in shared memory
  * */
@@ -197,6 +195,7 @@ void send_welmsg(int clifd)
     sprintf(buffer, "%s%s%s", colors[getpid() % 6], WELCOME_MSG, ANSI_COLOR_RESET);    /* different colors of welcome message for client */
     write(clifd, buffer, strlen(buffer));    /* write welcome message to client */
 }
+
 
 /*
  * receive line from client, store line to LineLinkedList, then parse command from line and execute command with pipe
@@ -291,7 +290,7 @@ void recv_cli_cmd(int clifd, int uid)
             char *env = getenv(argvs[0][1]);
             char *envstr =  malloc(snprintf(NULL, 0, "%s=%s\n", argvs[0][1], env) + 1);
             sprintf(envstr, "%s=%s\n", argvs[0][1], env);
-            write(clifd, envstr, sizeof(char)*strlen(envstr));
+            write(clidata[uid].clifd, envstr, sizeof(char)*strlen(envstr));
         }
         else if(reg_match(">[1-9][0-9]*$", line))
         {
@@ -303,7 +302,8 @@ void recv_cli_cmd(int clifd, int uid)
             {
                 curnode->filename = fifoname;
                 curnode->is_fifofile = 1;
-                execute_cmdline(parse_cmd_seq(line), clifd);
+                curnode->pipe_err = 1;
+                execute_cmdline(parse_cmd_seq(line));
             }
         }
         else if(reg_match("<[1-9][0-9]*$", line))
@@ -314,7 +314,7 @@ void recv_cli_cmd(int clifd, int uid)
             sprintf(fifoname, ".%dto%d", pipefromuid, uid);
             if(pipe_from_user(pipefromuid, fifoname))
             {
-                execute_cmdline(parse_cmd_seq(line), clifd);
+                execute_cmdline(parse_cmd_seq(line));
                 sprintf(msg, "*** %s (#%d) just received from %s (#%d) by '%s' ***\n", clidata[uid].name, uid, clidata[pipefromuid].name, pipefromuid, curnode->cmdline);
                 yell(msg);
                 clidata[uid].fifofd[pipefromuid] = -1;
@@ -326,7 +326,7 @@ void recv_cli_cmd(int clifd, int uid)
         {
             create_linenode(line, 0);
             curnode->filename = rm_fespace(get_filename(line));
-            execute_cmdline(parse_cmd_seq(line), clifd);
+            execute_cmdline(parse_cmd_seq(line));
         }
         else
         {
@@ -345,8 +345,19 @@ void recv_cli_cmd(int clifd, int uid)
                     curnode->pipe_err = 1;
                 }
             }
-            execute_cmdline(parse_cmd_seq(line), clifd);
+            execute_cmdline(parse_cmd_seq(line));
         }
+
+        if(sbchk_flag == 2)
+        {
+            char msg[MAX_MSG_LEN],fifoname[8];
+            sprintf(msg, "*** %s (#%d) just received from %s (#%d) by '%s' ***\n", clidata[uid].name, uid, clidata[sb_data].name, sb_data, curnode->cmdline);
+            yell(msg);
+            clidata[uid].fifofd[sb_data] = -1;
+            sprintf(fifoname, ".%dto%d", sb_data, uid);
+            unlink(fifoname);
+        }
+        sb_data = -1;
 
         //print_lists(headnode);
 
@@ -376,8 +387,7 @@ void clean_cli(int uid)
         }
     }
 
-    FD_CLR(clidata[uid].clifd, &allfds);
-    strcpy(clidata[uid].msg, " ");
+    FD_CLR(clidata[uid].clifd, &allfds);    /* remove client fd from allfds set*/
     free_lists(headnode);
     shutdown(clidata[uid].clifd, SHUT_RDWR);
     close(clidata[uid].clifd);
@@ -522,7 +532,7 @@ int get_endnum(char* line)
     return atoi(pipetonum);
 }
 
-void execute_cmdline(char ***argvs, int clifd)
+void execute_cmdline(char ***argvs)
 {
     int C;
     int cmd_count = 0;
@@ -530,6 +540,23 @@ void execute_cmdline(char ***argvs, int clifd)
     {
         ++cmd_count;
     }
+
+    int len = 0;
+    while(argvs[0][len])
+    {
+        ++len;
+    }
+    sbchk_flag = symbol_chk(argvs[0],len-1);
+
+    if(sbchk_flag > 0)
+    {
+        argvs[0][len-1] = NULL;
+    }
+    if(sbchk_flag == 3)
+    {
+        argvs[0][len-2] = NULL;
+    }
+
 
     int pipes_fd[cmd_count][2];    /* prepare pipe fd ,read from [0], write to [1] , there are MAX_CMD_COUNT fd group, but last one not always used */
 
@@ -568,7 +595,7 @@ void execute_cmdline(char ***argvs, int clifd)
         }
         else if(C == cmd_count-1 && curnode->pipeto == 0)    /* cmd is at the end of line, and no pipe to later line */
         {
-            fd_out = clifd;
+            fd_out = clidata[uid].clifd;
         }
         else if(C == cmd_count-1 && curnode->pipeto != 0)    /* cmd is at the end of line, but pipe to later line */
         {
@@ -603,7 +630,7 @@ void execute_cmdline(char ***argvs, int clifd)
         }
         else
         {
-            fd_err = clifd;
+            fd_err = clidata[uid].clifd;
         }
 
         if(C == 0 && curnode->fd_writein >= 0)    /* if cmd at the first of begining, and this line will read in from previous line pipe */
@@ -626,6 +653,46 @@ void execute_cmdline(char ***argvs, int clifd)
 
         int stat;
         wait(&stat);    /* wait for the client who call exec to run cmd, avoid child become zombie */
+    }
+}
+
+
+int symbol_chk(char** fircmd, int len) 
+{
+    char buf[MAX_MSG_LEN];
+    sprintf(buf, "%s %s", fircmd[len-1], fircmd[len]);
+    if(reg_match(">[1-9][0-9]*$", fircmd[len]))
+    {
+        int pipetouid = get_endnum(fircmd[len]);
+        char* fifoname=malloc(sizeof (char)*8);
+        sprintf(fifoname, ".%dto%d", uid, pipetouid);
+        if(pipe_to_user(pipetouid,fifoname))
+        {
+            curnode->filename = fifoname;
+            curnode->is_fifofile = 1;
+            curnode->pipe_err = 1;
+        }
+        return 1;
+    }
+    else if(reg_match("<[1-9][0-9]*$", fircmd[len]))
+    {
+        int pipefromuid = get_endnum(fircmd[len]);
+        char* fifoname=malloc(sizeof (char)*8);
+        sprintf(fifoname, ".%dto%d", pipefromuid, uid);
+        if(pipe_from_user(pipefromuid, fifoname))
+        {
+            sb_data = pipefromuid;
+            return 2;
+        }
+    }
+    else if(reg_match("> [^\\|/]+$", buf))
+    {
+        curnode->filename = fircmd[len];
+        return 3;
+    }
+    else
+    {
+        return 0;
     }
 }
 

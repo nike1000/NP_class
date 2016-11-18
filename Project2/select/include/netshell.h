@@ -52,7 +52,7 @@ int reg_match(char *, char*);
 char* get_filename(char *);
 int get_endnum(char *);
 char ***parse_cmd_seq(char *);
-void execute_cmdline(char ***, int);
+void execute_cmdline(char ***);
 void creat_proc(char **argv, int fd_in, int fd_out, int fd_err, int pipes_count, int pipes_fd[][2]);
 void who();
 void name(char*);
@@ -64,7 +64,6 @@ typedef struct CliInfo
     int clifd;
     int uid;
     char name[20];
-    char msg[MAX_MSG_LEN];
     char ip[20];
     unsigned short port;
     int fifofd[MAX_CLIENTS];
