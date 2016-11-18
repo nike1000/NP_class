@@ -698,6 +698,14 @@ void execute_cmdline(char ***argvs)
 
         int stat;
         wait(&stat);    /* wait for the client who call exec to run cmd, avoid child become zombie */
+
+        if(WIFEXITED(stat))    /* if occur Unknown command, give up other cmds after this in the same line */
+        {
+            if(WEXITSTATUS(stat) == EXIT_FAILURE)
+            {
+                break;
+            }
+        }
     }
 }
 
