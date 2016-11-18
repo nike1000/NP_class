@@ -5,13 +5,13 @@
 LineNode* headnode = NULL;
 LineNode* curnode = NULL;
 LineNode* tailnode = NULL;
-int clifd;
 int linecount = 1;
-int shmid;
+int clifd;
 int uid;
+int shmid;
 CliInfo* shmdata;
-int sbchk_flag = 0;
-int sb_data = -1;
+int sbchk_flag = 0;    /* recode type of second symbol */
+int sb_data = -1;      /* recode the data in symbol_chk */
 
 int main()
 {
@@ -39,7 +39,6 @@ int main()
     {
         commuto_client();
     }
-
     return 0;
 }
 
@@ -117,7 +116,7 @@ int start_server()
     int fpid;
     struct sockaddr_in serv_addr, cli_addr;
 
-    // server socket file descriptor
+    /* server socket file descriptor */
     sockfd = socket(AF_INET, SOCK_STREAM, 0);
 
     if(sockfd < 0)    /* sockfd = -1 if socket() error */
@@ -241,6 +240,7 @@ void send_welmsg(int clifd)
     sprintf(buffer, "%s%s%s", colors[getpid() % 6], WELCOME_MSG, ANSI_COLOR_RESET);    /* different colors of welcome message for client */
     write(clifd, buffer, strlen(buffer));    /* write welcome message to client */
 }
+
 
 /*
  * clean data when client exit
@@ -444,6 +444,7 @@ void recv_cli_cmd(int clifd)
     }
 }
 
+
 /*
  * one cmdline one node, cmd line may include multiple cmds
  * */
@@ -484,6 +485,7 @@ void create_linenode(char* line, int pipetonum)
     }
 }
 
+
 /*
  * remove whitespace at the front and end of the string
  * */
@@ -515,6 +517,7 @@ char *rm_fespace(char* line)
     return line;
 }
 
+
 /*
  * regular expression, if line match pattern return true, else false
  * */
@@ -539,6 +542,7 @@ int reg_match(char *pattern, char* line)
         return 1;
     }
 }
+
 
 char* get_filename(char* line)
 {
@@ -577,6 +581,7 @@ int get_endnum(char* line)
     line[count] = 0;    /* remove |N from string */
     return atoi(pipetonum);
 }
+
 
 void execute_cmdline(char ***argvs)
 {
@@ -727,6 +732,7 @@ void execute_cmdline(char ***argvs)
     }
 }
 
+
 int symbol_chk(char** fircmd, int len)
 {
     char buf[MAX_MSG_LEN];
@@ -759,25 +765,12 @@ int symbol_chk(char** fircmd, int len)
         curnode->filename = fircmd[len];
         return 3;
     }
-    /*else if(reg_match("![1-9][0-9]*$", fircmd[len]) || reg_match("\\|[1-9][0-9]*$", fircmd[len]))*/
-    /*{*/
-        /*print_lists(headnode);*/
-        /*LineNode* tmp = curnode;*/
-        /*create_linenode("", 0);*/
-        /*curnode = tmp;*/
-        /*curnode->pipeto = get_endnum(fircmd[len])-1;*/
-
-        /*if(reg_match("![1-9][0-9]*$", fircmd[len]))*/
-        /*{*/
-            /*curnode->pipe_err = 1;*/
-        /*}*/
-        /*return 1;*/
-    /*}*/
     else
     {
         return 0;
     }
 }
+
 
 void creat_proc(char **argv, int fd_in, int fd_out, int fd_err, int pipes_count, int pipes_fd[][2])
 {
@@ -834,6 +827,7 @@ void creat_proc(char **argv, int fd_in, int fd_out, int fd_err, int pipes_count,
         exit(EXIT_FAILURE);
     }
 }
+
 
 /*
  * parse line to argvs array, use to execvp
@@ -898,6 +892,7 @@ char ***parse_cmd_seq(char *str)
 
     return argvs;
 }
+
 
 void who()
 {
