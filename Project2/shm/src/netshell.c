@@ -15,7 +15,7 @@ int sb_data = -1;      /* recode the data in symbol_chk */
 
 int main()
 {
-    chdir("ras/");
+    chdir("rwg/");
     setenv("PATH", "bin:.", 1);
     headnode = create_node(0,"HEAD_NODE",0);
     curnode = headnode;
