@@ -19,7 +19,7 @@ void err_dump(char *string)
 
 int main()
 {
-    chdir("ras/");
+    chdir("rwg/");
 
     int i;
     for(i = 0; i < MAX_CLIENTS; i++)
