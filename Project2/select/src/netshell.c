@@ -148,6 +148,9 @@ int start_server()
 
                     recv_cli_cmd(fd, uid);    /* for loop to receive cmd from client */
                     write(fd, PROMOT, sizeof(char)*strlen(PROMOT));    /* show promot to client */
+                    clidata[uid].headnode = headnode;
+                    clidata[uid].curnode = curnode;
+                    clidata[uid].tailnode = tailnode;
                 }
             }
         }
