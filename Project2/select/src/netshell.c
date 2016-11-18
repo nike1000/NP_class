@@ -783,12 +783,11 @@ int symbol_chk(char*** argvs)
     {
         ++len;
     }
-    len--;
 
-    sprintf(buf, "%s %s", fircmd[len-1], fircmd[len]);
+    sprintf(buf, "%s %s", fircmd[len-2], fircmd[len-1]);
     if(reg_match("<[1-9][0-9]*$", fircmd[len]))
     {
-        int pipefromuid = get_endnum(fircmd[len]);
+        int pipefromuid = get_endnum(fircmd[len-1]);
         char* fifoname=malloc(sizeof (char)*8);
         sprintf(fifoname, ".%dto%d", pipefromuid, uid);
         if(pipe_from_user(pipefromuid, fifoname))
@@ -797,9 +796,9 @@ int symbol_chk(char*** argvs)
             return 1;
         }
     }
-    else if(reg_match(">[1-9][0-9]*$", fircmd[len]))
+    else if(reg_match(">[1-9][0-9]*$", fircmd[len-1]))
     {
-        int pipetouid = get_endnum(fircmd[len]);
+        int pipetouid = get_endnum(fircmd[len-1]);
         char* fifoname=malloc(sizeof (char)*8);
         sprintf(fifoname, ".%dto%d", uid, pipetouid);
         if(pipe_to_user(pipetouid,fifoname))
@@ -813,7 +812,7 @@ int symbol_chk(char*** argvs)
     }
     else if(reg_match("> [^\\|/]+$", buf))
     {
-        curnode->filename = fircmd[len];
+        curnode->filename = fircmd[len-1];
         return 3;
     }
     else
