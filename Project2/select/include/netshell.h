@@ -40,10 +40,12 @@
                     "****************************************\n"
 
 void err_dump(char *);
-void initdata();
+void initdata(int);
 int start_server();
 int client_init(struct in_addr in, unsigned short in_port, int clifd);
 void send_welmsg(int);
+void set_clienv(int);
+void clean_clienv(int);
 void recv_cli_cmd(int, int);
 void clean_cli(int);
 void create_linenode(char *,int);
@@ -71,6 +73,9 @@ typedef struct CliInfo
     LineNode* curnode;
     LineNode* tailnode;
     int linecount;
+    char* env[MAX_CLIENTS];
+    char* env_val[MAX_CLIENTS];
+    int env_count;
 }CliInfo;
 
 #endif

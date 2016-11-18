@@ -20,26 +20,29 @@ void err_dump(char *string)
 int main()
 {
     chdir("ras/");
-    initdata();
-    setenv("PATH", "bin:.", 1);
+
+    int i;
+    for(i = 0; i < MAX_CLIENTS; i++)
+    {
+        initdata(i);
+    }
     start_server();
     return 0;
 }
 
-void initdata()
+void initdata(int uid)
 {
+    clidata[uid].clifd = -1;
+    clidata[uid].uid = -1;
+    clidata[uid].linecount = -1;
+    clidata[uid].env_count = 0;
+
     int i;
     for(i = 0; i< MAX_CLIENTS; i++)
     {
-        clidata[i].clifd = -1;
-        clidata[i].uid = -1;
-        clidata[i].linecount = -1;
-
-        int j;
-        for(j = 0; j< MAX_CLIENTS; j++)
-        {
-            clidata[i].fifofd[j] = -1;
-        }
+        clidata[uid].fifofd[i] = -1;
+        clidata[uid].env[i] = NULL;
+        clidata[uid].env_val[i] = NULL;
     }
 }
 
@@ -144,8 +147,10 @@ int start_server()
                     tailnode = clidata[uid].tailnode;
                     linecount = clidata[uid].linecount;
 
+                    set_clienv(uid);
                     recv_cli_cmd(fd, uid);    /* for loop to receive cmd from client */
                     write(fd, PROMOT, sizeof(char)*strlen(PROMOT));    /* show promot to client */
+                    clean_clienv(uid);
                     clidata[uid].headnode = headnode;
                     clidata[uid].curnode = curnode;
                     clidata[uid].tailnode = tailnode;
@@ -178,6 +183,9 @@ int client_init(struct in_addr in, unsigned short in_port, int clifd)
             clidata[i].headnode = create_node(0,"HEAD_NODE",0);       /* headnode */
             clidata[i].curnode = clidata[i].headnode;                 /* curnode */
             clidata[i].tailnode = clidata[i].headnode;                /* tailnode */
+            clidata[i].env[0] = "PATH";
+            clidata[i].env_val[0] = "bin:.";
+            clidata[i].env_count++;
             break;
         }
     }
@@ -194,6 +202,26 @@ void send_welmsg(int clifd)
     char buffer[LINEMAX];
     sprintf(buffer, "%s%s%s", colors[getpid() % 6], WELCOME_MSG, ANSI_COLOR_RESET);    /* different colors of welcome message for client */
     write(clifd, buffer, strlen(buffer));    /* write welcome message to client */
+}
+
+
+void set_clienv(int uid)
+{
+    int i;
+    for(i = 0; i < clidata[uid].env_count; i++)
+    {
+        setenv(clidata[uid].env[i],clidata[uid].env_val[i],1);
+    }
+}
+
+
+void clean_clienv(int uid)
+{
+    int i;
+    for(i = 0; i < clidata[uid].env_count; i++)
+    {
+        setenv(clidata[uid].env[i], "",1);
+    }
 }
 
 
@@ -281,7 +309,27 @@ void recv_cli_cmd(int clifd, int uid)
         {
             create_linenode(line, 0);
             char ***argvs = parse_cmd_seq(line);
-            setenv(argvs[0][1],argvs[0][2],1);
+
+            int i, flag = 0;
+            for(i = 0; i < clidata[uid].env_count; i++)
+            {
+                if (strcmp(clidata[uid].env[i], argvs[0][1]) == 0)
+                {
+                    flag = 1;
+                    clidata[uid].env_val[i] = malloc(sizeof (char)*strlen(argvs[0][2]));
+                    strcpy(clidata[uid].env_val[i], argvs[0][2]);
+                    break;
+                }
+            }
+            if(!flag)
+            {
+                int count = clidata[uid].env_count;
+                clidata[uid].env[count] = malloc(sizeof (char)*strlen(argvs[0][1]));
+                strcpy(clidata[uid].env[count], argvs[0][1]);
+                clidata[uid].env_val[count] = malloc(sizeof (char)*strlen(argvs[0][2]));
+                strcpy(clidata[uid].env_val[count], argvs[0][2]);
+                clidata[uid].env_count++;
+            }
         }
         else if(reg_match("^(printenv)", line))
         {
@@ -391,10 +439,7 @@ void clean_cli(int uid)
     free_lists(headnode);
     shutdown(clidata[uid].clifd, SHUT_RDWR);
     close(clidata[uid].clifd);
-    clidata[uid].clifd = -1;
-    clidata[uid].uid = -1;
-    clidata[uid].linecount = -1;
-
+    initdata(uid);
 }
 
 
