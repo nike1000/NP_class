@@ -785,7 +785,7 @@ int symbol_chk(char*** argvs)
     }
 
     sprintf(buf, "%s %s", fircmd[len-2], fircmd[len-1]);
-    if(reg_match("<[1-9][0-9]*$", fircmd[len]))
+    if(reg_match("<[1-9][0-9]*$", fircmd[len-1]))
     {
         int pipefromuid = get_endnum(fircmd[len-1]);
         char* fifoname=malloc(sizeof (char)*8);
