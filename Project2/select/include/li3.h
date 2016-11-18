@@ -12,6 +12,7 @@ typedef struct LineNode
     int pipe_err;
     int fd_tofile;
     char* filename;
+    int is_fifofile;
     int fd_readout;
     int fd_writein;
     struct LineNode* nextPtr;

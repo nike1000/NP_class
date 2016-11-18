@@ -127,9 +127,9 @@ int start_server()
                         uid = client_init(cli_addr.sin_addr, cli_addr.sin_port, clifd);
                         send_welmsg(clifd);
 
-                        /*char msg[MAX_MSG_LEN];*/
-                        /*sprintf(msg, "*** User '%s' entered from %s/%d. ***\n% ",clidata[uid].name, clidata[uid].ip, clidata[uid].port);*/
-                        /*yell(msg);*/
+                        char msg[MAX_MSG_LEN];
+                        sprintf(msg, "*** User '%s' entered from %s/%d. ***\n% ",clidata[uid].name, clidata[uid].ip, clidata[uid].port);
+                        yell(msg);
                         write(clifd, PROMOT, sizeof(char)*strlen(PROMOT));    /* show promot to client */
                     }
                 }
@@ -145,12 +145,14 @@ int start_server()
                     headnode = clidata[uid].headnode;
                     curnode = clidata[uid].curnode;
                     tailnode = clidata[uid].tailnode;
+                    linecount = clidata[uid].linecount;
 
                     recv_cli_cmd(fd, uid);    /* for loop to receive cmd from client */
                     write(fd, PROMOT, sizeof(char)*strlen(PROMOT));    /* show promot to client */
                     clidata[uid].headnode = headnode;
                     clidata[uid].curnode = curnode;
                     clidata[uid].tailnode = tailnode;
+                    clidata[uid].linecount = linecount;
                 }
             }
         }
@@ -226,62 +228,127 @@ void recv_cli_cmd(int clifd, int uid)
     {
         line = rm_fespace(line);    /* to catch |N in the end of line, we remove all space at the end */
 
-        if(strcmp(line,"exit")==0)
+        if(reg_match("^(exit)", line))
         {
-           clean_cli(uid); 
+            char msg[MAX_MSG_LEN];
+            sprintf(msg, "*** User '%s' left. ***\n", clidata[uid].name);
+            yell(msg);
+            clean_cli(uid);
         }
-
-        int is_setenv = reg_match("^(setenv)", line);    /* setenv */
-        int is_printenv = reg_match("^(printenv)", line);    /* printenv */
-        if(is_setenv||is_printenv)
+        else if(reg_match("^(who)", line))
         {
-            // not pipe or redirect, do all by self
+            create_linenode(line, 0);
+            who();
+        }
+        else if(reg_match("^(name)", line))
+        {
+            create_linenode(line, 0);
+            char* newname = line+5;    /* 5 offset of char to skip cmd 'name' and a space at beginning of line */
+            if(strlen(newname) > 20)
+            {
+                newname[20] = 0;
+            }
+            name(newname);
+        }
+        else if(reg_match("^(yell)", line))
+        {
+            create_linenode(line, 0);
+            char buf[MAX_MSG_LEN+50];
+            char* msg = line+5;    /* 5 offset of char to skip cmd 'yell' and a space at beginning of line */
+            if(strlen(msg) > MAX_MSG_LEN)
+            {
+                msg[MAX_MSG_LEN] = 0;
+            }
+            sprintf(buf, "*** %s yelled ***: %s\n", clidata[uid].name, msg);
+            yell(buf);
+        }
+        else if(reg_match("^(tell)", line))
+        {
+            create_linenode(line, 0);
+            char buf[MAX_MSG_LEN+50], tmp[MAX_MSG_LEN+50];
+            strcpy(tmp,line);
+
+            char ***argvs = parse_cmd_seq(line);
+            int touid = atoi(argvs[0][1]);
+            char *msg = tmp+strlen(argvs[0][0])+strlen(argvs[0][1])+2;    /* offset of char to skip cmd 'tell' ,touid and two spaces at beginning of line */
+            if(strlen(msg) > MAX_MSG_LEN)
+            {
+                msg[MAX_MSG_LEN] = 0;
+            }
+            sprintf(buf, "*** %s told you ***: %s\n", clidata[uid].name, msg);
+            tell(buf, touid);
+        }
+        else if(reg_match("^(setenv)", line))
+        {
             create_linenode(line, 0);
             char ***argvs = parse_cmd_seq(line);
-            if(is_setenv)
-            {
-                setenv(argvs[0][1],argvs[0][2],1);
-            }
-            else if(is_printenv)
-            {
-                char *env = getenv(argvs[0][1]);
-                char *envstr =  malloc(snprintf(NULL, 0, "%s=%s\n", argvs[0][1], env) + 1);
-                sprintf(envstr, "%s=%s\n", argvs[0][1], env);
-                write(clifd, envstr, sizeof(char)*strlen(envstr));
-            }
-            line = strtok(NULL, delim);
-            continue;
+            setenv(argvs[0][1],argvs[0][2],1);
         }
-
-        int is_tofile = reg_match(">[ ]*[^\\|/]+$", line);    /* match > to file at the end of line */
-        if(is_tofile)
+        else if(reg_match("^(printenv)", line))
+        {
+            create_linenode(line, 0);
+            char ***argvs = parse_cmd_seq(line);
+            char *env = getenv(argvs[0][1]);
+            char *envstr =  malloc(snprintf(NULL, 0, "%s=%s\n", argvs[0][1], env) + 1);
+            sprintf(envstr, "%s=%s\n", argvs[0][1], env);
+            write(clifd, envstr, sizeof(char)*strlen(envstr));
+        }
+        else if(reg_match(">[1-9][0-9]*$", line))
+        {
+            create_linenode(line, 0);
+            int pipetouid = get_endnum(line);
+            char fifoname[8];
+            sprintf(fifoname, ".%dto%d", uid, pipetouid);
+            if(pipe_to_user(pipetouid,fifoname))
+            {
+                curnode->filename = fifoname;
+                curnode->is_fifofile = 1;
+                execute_cmdline(parse_cmd_seq(line), clifd);
+            }
+        }
+        else if(reg_match("<[1-9][0-9]*$", line))
+        {
+            create_linenode(line, 0);
+            int pipefromuid = get_endnum(line);
+            char fifoname[8], msg[MAX_MSG_LEN];
+            sprintf(fifoname, ".%dto%d", pipefromuid, uid);
+            if(pipe_from_user(pipefromuid, fifoname))
+            {
+                execute_cmdline(parse_cmd_seq(line), clifd);
+                sprintf(msg, "*** %s (#%d) just received from %s (#%d) by '%s' ***\n", clidata[uid].name, uid, clidata[pipefromuid].name, pipefromuid, curnode->cmdline);
+                yell(msg);
+                clidata[uid].fifofd[pipefromuid] = -1;
+                sprintf(fifoname, ".%dto%d", pipefromuid, uid);
+                unlink(fifoname);
+            }
+        }
+        else if(reg_match(">[ ]*[^\\|/]+$", line))    /* match > to file at the end of line */
         {
             create_linenode(line, 0);
             curnode->filename = rm_fespace(get_filename(line));
             execute_cmdline(parse_cmd_seq(line), clifd);
-            line = strtok(NULL, delim);
-            continue;
-        }
-
-        int pipe_err = reg_match("![1-9][0-9]*$", line);    /* match !N at the end of line */
-        int pipe_out = reg_match("\\|[1-9][0-9]*$", line);  /* match |N at the end of line */
-
-        if(!pipe_err && !pipe_out)
-        {
-            create_linenode(line, 0);    /* xxx | yyy | zzz  */
         }
         else
         {
-            create_linenode(line, get_endnum(line));
-            if(pipe_err)
+            int pipe_err = reg_match("![1-9][0-9]*$", line);    /* match !N at the end of line */
+            int pipe_out = reg_match("\\|[1-9][0-9]*$", line);  /* match |N at the end of line */
+
+            if(!pipe_err && !pipe_out)
             {
-                curnode->pipe_err = 1;
+                create_linenode(line, 0);    /* xxx | yyy | zzz  */
             }
+            else
+            {
+                create_linenode(line, get_endnum(line));
+                if(pipe_err)
+                {
+                    curnode->pipe_err = 1;
+                }
+            }
+            execute_cmdline(parse_cmd_seq(line), clifd);
         }
 
         //print_lists(headnode);
-
-        execute_cmdline(parse_cmd_seq(line), clifd);
 
         line = strtok(NULL, delim);
     }while(line);// strtok return NULL when , NULL pointer is false
@@ -309,6 +376,7 @@ void clean_cli(int uid)
         }
     }
 
+    FD_CLR(clidata[uid].clifd, &allfds);
     strcpy(clidata[uid].msg, " ");
     free_lists(headnode);
     shutdown(clidata[uid].clifd, SHUT_RDWR);
@@ -679,4 +747,139 @@ char ***parse_cmd_seq(char *str)
     }
 
     return argvs;
+}
+
+void who()
+{
+    char msg[1024];
+    strcpy(msg, "<ID>      <nickname>               <IP/port>               <indicate me>\n");
+    write(clidata[uid].clifd, msg, strlen(msg));
+
+    int i;
+    for(i = 1; i < MAX_CLIENTS; ++i)
+    {
+        if(clidata[i].uid != -1)
+        {
+            if(clidata[i].uid == uid)
+            {
+                sprintf(msg, "%-10d%-25s%-s/%-8d<-me\n", clidata[i].uid, clidata[i].name, clidata[i].ip, clidata[i].port);
+            }
+            else
+            {
+                sprintf(msg, "%-10d%-25s%-s/%-8d\n", clidata[i].uid, clidata[i].name, clidata[i].ip, clidata[i].port);
+            }
+            write(clidata[uid].clifd, msg, strlen(msg));
+        }
+    }
+}
+
+
+void name(char* newname)
+{
+    int i, exist = 0;
+    char msg[MAX_MSG_LEN];
+
+    for(i = 0; i < MAX_CLIENTS; i++)
+    {
+        if(strcmp(newname, clidata[i].name)==0)
+        {
+            exist = 1;
+            break;
+        }
+    }
+
+    if(exist)
+    {
+        sprintf(msg, "*** User '%s' already exists. ***\n", newname);
+        write(clidata[uid].clifd, msg, strlen(msg));
+    }
+    else
+    {
+        strcpy(clidata[uid].name, newname);
+        sprintf(msg, "*** User from %s/%d is named '%s'. ***\n", clidata[uid].ip, clidata[uid].port, clidata[uid].name);
+        yell(msg);
+    }
+}
+
+
+void tell(char* msg, int touid)
+{
+    if(clidata[touid].uid != -1)
+    {
+        write(clidata[touid].clifd, msg, strlen(msg));
+    }
+    else
+    {
+        char msg[MAX_MSG_LEN];
+        sprintf(msg, "*** Error: user #%d does not exist yet. ***\n", touid);
+        write(clidata[uid].clifd, msg, strlen(msg));
+    }
+}
+
+
+void yell(char* msg)
+{
+    int i;
+    for (i = 0; i < MAX_CLIENTS; i++)
+    {
+        if(clidata[i].uid != -1)
+        {
+            write(clidata[i].clifd, msg, strlen(msg));
+        }
+    }
+}
+
+
+int pipe_to_user(int touid,char *fifoname)
+{
+    char msg[MAX_MSG_LEN];
+    if(clidata[touid].uid == -1)
+    {
+        sprintf(msg, "*** Error: user #%d does not exist yet. ***\n", touid);
+        write(clidata[uid].clifd, msg, strlen(msg));
+    }
+    else
+    {
+        int status = mknod(fifoname, S_IFIFO|0666, 0);
+        if(status)
+        {
+            if(errno == EEXIST)
+            {
+                sprintf(msg, "*** Error: the pipe #%d->#%d already exists. ***\n", uid, touid);
+                write(clidata[uid].clifd, msg, strlen(msg));
+            }
+            else
+            {
+                err_dump("FIFO create fail.");
+            }
+        }
+        else
+        {
+            if(access(fifoname,F_OK) == 0 && clidata[touid].fifofd[uid] == -1)
+            {
+                clidata[touid].fifofd[uid] = open(fifoname, O_RDONLY|O_NONBLOCK);
+            }
+            sprintf(msg, "*** %s (#%d) just piped '%s' to %s (#%d) ***\n", clidata[uid].name, uid, curnode->cmdline, clidata[touid].name, touid);
+            yell(msg);
+            return 1;
+        }
+    }
+    return 0;
+}
+
+
+int pipe_from_user(int fromuid,char *fifoname)
+{
+    char msg[MAX_MSG_LEN];
+    if(clidata[uid].fifofd[fromuid] == -1)
+    {
+        sprintf(msg, "*** Error: the pipe #%d->#%d does not exist yet. ***\n", fromuid, uid);
+        write(clidata[uid].clifd, msg, strlen(msg));
+    }
+    else
+    {
+        curnode->fd_readout = clidata[uid].fifofd[fromuid];
+        return 1;
+    }
+    return 0;
 }

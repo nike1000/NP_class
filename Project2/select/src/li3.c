@@ -9,6 +9,7 @@ LineNode* create_node(int linenum, char* data, int pipeto)
     n->pipe_err = 0;
     n->fd_tofile = -1;
     n->filename = NULL;
+    n->is_fifofile = 0;
     n->fd_writein = -1;
     n->fd_readout = -1;
     n->nextPtr = NULL;
