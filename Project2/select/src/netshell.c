@@ -344,27 +344,89 @@ void recv_cli_cmd(int clifd, int uid)
         {
             create_linenode(line, 0);
             int pipetouid = get_endnum(line);
-            char fifoname[8];
+            char ***argvs = parse_cmd_seq(line);
+            char fifoname[8], msg[MAX_MSG_LEN];
             sprintf(fifoname, ".%dto%d", uid, pipetouid);
+
             if(pipe_to_user(pipetouid,fifoname))
             {
+                int len = 0;
+                while(argvs[0][len])
+                {
+                    ++len;
+                }
+
+                int sbchk_flag = symbol_chk(argvs);
+                if(sbchk_flag == 1)    /* case: cmd <N >M */
+                {
+                    argvs[0][len-1] = NULL;
+                }
+                else if(sbchk_flag > 0)
+                {
+                    char* msg = "Illegal Symbol\n";
+                    write(clidata[uid].clifd, msg, strlen(msg));
+                    return;
+                }
+
                 curnode->filename = fifoname;
                 curnode->is_fifofile = 1;
                 curnode->pipe_err = 1;
-                execute_cmdline(parse_cmd_seq(line));
+                execute_cmdline(argvs);
+
+                if(sbchk_flag == 1)    /* case cat <N >M */
+                {
+                    sprintf(msg, "*** %s (#%d) just received from %s (#%d) by '%s' ***\n", clidata[uid].name, uid, clidata[sb_data].name, sb_data, curnode->cmdline);
+                    yell(msg);
+                    clidata[uid].fifofd[pipetouid] = -1;
+                    sprintf(fifoname, ".%dto%d", sb_data, uid);
+                    unlink(fifoname);
+                }
+                sprintf(msg, "*** %s (#%d) just piped '%s' to %s (#%d) ***\n", clidata[uid].name, uid, curnode->cmdline, clidata[pipetouid].name, pipetouid);
+                yell(msg);
             }
         }
         else if(reg_match("<[1-9][0-9]*$", line))
         {
             create_linenode(line, 0);
             int pipefromuid = get_endnum(line);
+            char ***argvs = parse_cmd_seq(line);
             char fifoname[8], msg[MAX_MSG_LEN];
             sprintf(fifoname, ".%dto%d", pipefromuid, uid);
             if(pipe_from_user(pipefromuid, fifoname))
             {
-                execute_cmdline(parse_cmd_seq(line));
+                int len = 0;
+                while(argvs[0][len])
+                {
+                    ++len;
+                }
+
+                int sbchk_flag = symbol_chk(argvs);
+                if(sbchk_flag == 1)    /* Illegal case: cmd <N <M */
+                {
+                    char* msg = "Illegal Symbol\n";
+                    write(clidata[uid].clifd, msg, strlen(msg));
+                    return;
+                }
+                else if(sbchk_flag == 2)    /* case cmd >N <M */
+                {
+                    argvs[0][len-1] = NULL;
+                }
+                else if(sbchk_flag == 3)    /* case: cmd > file <M */
+                {
+                    argvs[0][len-1] = NULL;
+                    argvs[0][len-2] = NULL;
+                }
+
+                execute_cmdline(argvs);
                 sprintf(msg, "*** %s (#%d) just received from %s (#%d) by '%s' ***\n", clidata[uid].name, uid, clidata[pipefromuid].name, pipefromuid, curnode->cmdline);
                 yell(msg);
+
+                if(sbchk_flag == 2)    /* case cat >N <M */
+                {
+                    sprintf(msg, "*** %s (#%d) just piped '%s' to %s (#%d) ***\n", clidata[uid].name, uid, curnode->cmdline, clidata[sb_data].name, sb_data);
+                    yell(msg);
+                }
+
                 clidata[uid].fifofd[pipefromuid] = -1;
                 sprintf(fifoname, ".%dto%d", pipefromuid, uid);
                 unlink(fifoname);
@@ -372,9 +434,38 @@ void recv_cli_cmd(int clifd, int uid)
         }
         else if(reg_match(">[ ]*[^\\|/]+$", line))    /* match > to file at the end of line */
         {
+            char msg[MAX_MSG_LEN], fifoname[8];
             create_linenode(line, 0);
             curnode->filename = rm_fespace(get_filename(line));
-            execute_cmdline(parse_cmd_seq(line));
+            char*** argvs = parse_cmd_seq(line);
+
+            int len = 0;
+            while(argvs[0][len])
+            {
+                ++len;
+            }
+
+            int sbchk_flag = symbol_chk(argvs);
+            if(sbchk_flag == 1)    /* case: cmd <N > file */
+            {
+                argvs[0][len-1] = NULL;
+            }
+            else if(sbchk_flag > 0)
+            {
+                char* msg = "Illegal Symbol\n";
+                write(clidata[uid].clifd, msg, strlen(msg));
+                return;
+            }
+
+            execute_cmdline(argvs);
+            if(sbchk_flag == 1)    /* case cat <N >M */
+            {
+                sprintf(msg, "*** %s (#%d) just received from %s (#%d) by '%s' ***\n", clidata[uid].name, uid, clidata[sb_data].name, sb_data, curnode->cmdline);
+                yell(msg);
+                clidata[uid].fifofd[sb_data] = -1;
+                sprintf(fifoname, ".%dto%d", sb_data, uid);
+                unlink(fifoname);
+            }
         }
         else
         {
@@ -395,17 +486,6 @@ void recv_cli_cmd(int clifd, int uid)
             }
             execute_cmdline(parse_cmd_seq(line));
         }
-
-        if(sbchk_flag == 2)
-        {
-            char msg[MAX_MSG_LEN],fifoname[8];
-            sprintf(msg, "*** %s (#%d) just received from %s (#%d) by '%s' ***\n", clidata[uid].name, uid, clidata[sb_data].name, sb_data, curnode->cmdline);
-            yell(msg);
-            clidata[uid].fifofd[sb_data] = -1;
-            sprintf(fifoname, ".%dto%d", sb_data, uid);
-            unlink(fifoname);
-        }
-        sb_data = -1;
 
         //print_lists(headnode);
 
@@ -586,23 +666,6 @@ void execute_cmdline(char ***argvs)
         ++cmd_count;
     }
 
-    int len = 0;
-    while(argvs[0][len])
-    {
-        ++len;
-    }
-    sbchk_flag = symbol_chk(argvs[0],len-1);
-
-    if(sbchk_flag > 0)
-    {
-        argvs[0][len-1] = NULL;
-    }
-    if(sbchk_flag == 3)
-    {
-        argvs[0][len-2] = NULL;
-    }
-
-
     int pipes_fd[cmd_count][2];    /* prepare pipe fd ,read from [0], write to [1] , there are MAX_CMD_COUNT fd group, but last one not always used */
 
     for (C = 0; C < cmd_count; ++C)
@@ -710,11 +773,31 @@ void execute_cmdline(char ***argvs)
 }
 
 
-int symbol_chk(char** fircmd, int len) 
+int symbol_chk(char*** argvs) 
 {
+    int len = 0;
+    char** fircmd = argvs[0];
     char buf[MAX_MSG_LEN];
+
+    while(argvs[0][len])
+    {
+        ++len;
+    }
+    len--;
+
     sprintf(buf, "%s %s", fircmd[len-1], fircmd[len]);
-    if(reg_match(">[1-9][0-9]*$", fircmd[len]))
+    if(reg_match("<[1-9][0-9]*$", fircmd[len]))
+    {
+        int pipefromuid = get_endnum(fircmd[len]);
+        char* fifoname=malloc(sizeof (char)*8);
+        sprintf(fifoname, ".%dto%d", pipefromuid, uid);
+        if(pipe_from_user(pipefromuid, fifoname))
+        {
+            sb_data = pipefromuid;
+            return 1;
+        }
+    }
+    else if(reg_match(">[1-9][0-9]*$", fircmd[len]))
     {
         int pipetouid = get_endnum(fircmd[len]);
         char* fifoname=malloc(sizeof (char)*8);
@@ -724,19 +807,9 @@ int symbol_chk(char** fircmd, int len)
             curnode->filename = fifoname;
             curnode->is_fifofile = 1;
             curnode->pipe_err = 1;
+            sb_data = pipetouid;
         }
-        return 1;
-    }
-    else if(reg_match("<[1-9][0-9]*$", fircmd[len]))
-    {
-        int pipefromuid = get_endnum(fircmd[len]);
-        char* fifoname=malloc(sizeof (char)*8);
-        sprintf(fifoname, ".%dto%d", pipefromuid, uid);
-        if(pipe_from_user(pipefromuid, fifoname))
-        {
-            sb_data = pipefromuid;
-            return 2;
-        }
+        return 2;
     }
     else if(reg_match("> [^\\|/]+$", buf))
     {
@@ -979,8 +1052,6 @@ int pipe_to_user(int touid,char *fifoname)
             {
                 clidata[touid].fifofd[uid] = open(fifoname, O_RDONLY|O_NONBLOCK);
             }
-            sprintf(msg, "*** %s (#%d) just piped '%s' to %s (#%d) ***\n", clidata[uid].name, uid, curnode->cmdline, clidata[touid].name, touid);
-            yell(msg);
             return 1;
         }
     }
