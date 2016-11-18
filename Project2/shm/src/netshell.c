@@ -390,6 +390,8 @@ void recv_cli_cmd(int clifd)
                     if(sbchk_flag == 1)    /* case: cmd <N >M */
                     {
                         argvs[0][len-1] = NULL;
+                        sprintf(msg, "*** %s (#%d) just received from %s (#%d) by '%s' ***\n", shmdata[uid].name, uid, shmdata[sb_data].name, sb_data, curnode->cmdline);
+                        yell(msg);
                     }
                     else if(sbchk_flag > 0)
                     {
@@ -405,8 +407,6 @@ void recv_cli_cmd(int clifd)
 
                     if(sbchk_flag == 1)    /* case cat <N >M */
                     {
-                        sprintf(msg, "*** %s (#%d) just received from %s (#%d) by '%s' ***\n", shmdata[uid].name, uid, shmdata[sb_data].name, sb_data, curnode->cmdline);
-                        yell(msg);
                         shmdata[uid].fifofd[pipetouid] = -1;
                         sprintf(fifoname, ".%dto%d", sb_data, uid);
                         unlink(fifoname);
@@ -446,9 +446,9 @@ void recv_cli_cmd(int clifd)
                         argvs[0][len-1] = NULL;
                         argvs[0][len-2] = NULL;
                     }
-                    execute_cmdline(parse_cmd_seq(line));
                     sprintf(msg, "*** %s (#%d) just received from %s (#%d) by '%s' ***\n", shmdata[uid].name, uid, shmdata[pipefromuid].name, pipefromuid, curnode->cmdline);
                     yell(msg);
+                    execute_cmdline(parse_cmd_seq(line));
 
                     if(sbchk_flag == 2)    /* case cat >N <M */
                     {

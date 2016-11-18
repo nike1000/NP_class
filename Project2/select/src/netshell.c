@@ -417,9 +417,9 @@ void recv_cli_cmd(int clifd, int uid)
                     argvs[0][len-2] = NULL;
                 }
 
-                execute_cmdline(argvs);
                 sprintf(msg, "*** %s (#%d) just received from %s (#%d) by '%s' ***\n", clidata[uid].name, uid, clidata[pipefromuid].name, pipefromuid, curnode->cmdline);
                 yell(msg);
+                execute_cmdline(argvs);
 
                 if(sbchk_flag == 2)    /* case cat >N <M */
                 {
@@ -449,6 +449,8 @@ void recv_cli_cmd(int clifd, int uid)
             if(sbchk_flag == 1)    /* case: cmd <N > file */
             {
                 argvs[0][len-1] = NULL;
+                sprintf(msg, "*** %s (#%d) just received from %s (#%d) by '%s' ***\n", clidata[uid].name, uid, clidata[sb_data].name, sb_data, curnode->cmdline);
+                yell(msg);
             }
             else if(sbchk_flag > 0)
             {
@@ -460,8 +462,6 @@ void recv_cli_cmd(int clifd, int uid)
             execute_cmdline(argvs);
             if(sbchk_flag == 1)    /* case cat <N >M */
             {
-                sprintf(msg, "*** %s (#%d) just received from %s (#%d) by '%s' ***\n", clidata[uid].name, uid, clidata[sb_data].name, sb_data, curnode->cmdline);
-                yell(msg);
                 clidata[uid].fifofd[sb_data] = -1;
                 sprintf(fifoname, ".%dto%d", sb_data, uid);
                 unlink(fifoname);
