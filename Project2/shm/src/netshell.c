@@ -64,7 +64,7 @@ void sigPipe(int sig)
 {
     int i;
     char fifoname[8];
-    for(i=0; i<MAX_CLIENTS; i++)
+    for(i=1; i<=MAX_CLIENTS; i++)
     {
         sprintf(fifoname, ".%dto%d", i, uid);
         if(access(fifoname,F_OK) == 0 && shmdata[uid].fifofd[i] == -1)
@@ -93,13 +93,13 @@ void initshm()
     }
 
     int i;
-    for (i = 0; i < MAX_CLIENTS; i++)
+    for (i = 1; i <= MAX_CLIENTS; i++)
     {
         shmdata[i].uid = -1;
         shmdata[i].pid = -1;
 
         int j;
-        for(j = 0; j < MAX_CLIENTS; j++)
+        for(j = 1; j <= MAX_CLIENTS; j++)
         {
             shmdata[i].fifofd[j] = -1;
         }
@@ -199,7 +199,7 @@ int start_server()
 int client_init(struct in_addr in, unsigned short in_port)
 {
     int i;
-    for (i = 1; i < MAX_CLIENTS; i++)
+    for (i = 1; i <= MAX_CLIENTS; i++)
     {
         if (shmdata[i].pid == -1)
         {
@@ -251,7 +251,7 @@ void clean_cli(int uid,int shmid)
     shmdata[uid].uid = -1;
 
     int i;
-    for(i = 0;i < MAX_CLIENTS; i++)
+    for(i = 1;i <= MAX_CLIENTS; i++)
     {
         if(shmdata[uid].fifofd[i] != -1)
         {
@@ -975,7 +975,7 @@ void who()
     write(clifd, msg, strlen(msg));
 
     int i;
-    for(i = 1; i < MAX_CLIENTS; ++i)
+    for(i = 1; i <= MAX_CLIENTS; i++)
     {
         if(shmdata[i].uid != -1)
         {
@@ -997,7 +997,7 @@ void name(char* newname)
     int i, exist = 0;
     char msg[MAX_MSG_LEN];
 
-    for(i = 0; i < MAX_CLIENTS; i++)
+    for(i = 1; i <= MAX_CLIENTS; i++)
     {
         if(strcmp(newname, shmdata[i].name)==0)
         {
@@ -1038,7 +1038,7 @@ void tell(char* msg, int touid)
 void yell(char* msg)
 {
     int i;
-    for (i = 0; i < MAX_CLIENTS; i++)
+    for (i = 1; i <= MAX_CLIENTS; i++)
     {
         if(shmdata[i].pid != -1)
         {

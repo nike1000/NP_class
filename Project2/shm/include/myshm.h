@@ -5,7 +5,7 @@
 #include <sys/shm.h>
 #include <signal.h>
 
-#define MAX_CLIENTS 30
+#define MAX_CLIENTS 31
 #define SHMKEY 999
 #define MAX_MSG_LEN 1024
 
