@@ -22,7 +22,7 @@ int main()
     chdir("rwg/");
 
     int i;
-    for(i = 0; i < MAX_CLIENTS; i++)
+    for(i = 1; i <= MAX_CLIENTS; i++)
     {
         initdata(i);
     }
@@ -38,7 +38,7 @@ void initdata(int uid)
     clidata[uid].env_count = 0;
 
     int i;
-    for(i = 0; i< MAX_CLIENTS; i++)
+    for(i = 1; i<= MAX_CLIENTS; i++)
     {
         clidata[uid].fifofd[i] = -1;
         clidata[uid].env[i] = NULL;
@@ -135,7 +135,7 @@ int start_server()
                 }
                 else    /* some client send message to server */
                 {
-                    for(uid = 1; uid < MAX_CLIENTS; uid++)
+                    for(uid = 1; uid <= MAX_CLIENTS; uid++)
                     {
                         if(clidata[uid].clifd == fd)    /* find the uid of client match the file descriptor */
                         {
@@ -169,7 +169,7 @@ int start_server()
 int client_init(struct in_addr in, unsigned short in_port, int clifd)
 {
     int i;
-    for (i = 1; i < MAX_CLIENTS; i++)
+    for (i = 1; i <= MAX_CLIENTS; i++)
     {
         if (clidata[i].uid == -1)
         {
@@ -529,7 +529,7 @@ void recv_cli_cmd(int clifd, int uid)
 void clean_cli(int uid)
 {
     int i;
-    for(i = 0;i < MAX_CLIENTS; i++)
+    for(i = 1;i <= MAX_CLIENTS; i++)
     {
         if(clidata[uid].fifofd[i] != -1)
         {
@@ -978,7 +978,7 @@ void who()
     write(clidata[uid].clifd, msg, strlen(msg));
 
     int i;
-    for(i = 1; i < MAX_CLIENTS; ++i)
+    for(i = 1; i <= MAX_CLIENTS; i++)
     {
         if(clidata[i].uid != -1)
         {
@@ -1001,7 +1001,7 @@ void name(char* newname)
     int i, exist = 0;
     char msg[MAX_MSG_LEN];
 
-    for(i = 0; i < MAX_CLIENTS; i++)
+    for(i = 1; i <= MAX_CLIENTS; i++)
     {
         if(strcmp(newname, clidata[i].name)==0)
         {
@@ -1042,7 +1042,7 @@ void tell(char* msg, int touid)
 void yell(char* msg)
 {
     int i;
-    for (i = 0; i < MAX_CLIENTS; i++)
+    for (i = 1; i <= MAX_CLIENTS; i++)
     {
         if(clidata[i].uid != -1)
         {

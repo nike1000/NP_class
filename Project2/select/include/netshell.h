@@ -30,7 +30,7 @@
 #define LINEMAX 15000
 #define MAX_ARG_COUNT 15
 #define MAX_CMD_COUNT 15000
-#define MAX_CLIENTS 30
+#define MAX_CLIENTS 31
 #define MAX_MSG_LEN 1024
 
 
