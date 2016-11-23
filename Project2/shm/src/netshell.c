@@ -407,7 +407,7 @@ void recv_cli_cmd(int clifd)
 
                     if(sbchk_flag == 1)    /* case cat <N >M */
                     {
-                        shmdata[uid].fifofd[pipetouid] = -1;
+                        shmdata[uid].fifofd[sb_data] = -1;
                         sprintf(fifoname, ".%dto%d", sb_data, uid);
                         unlink(fifoname);
                     }
@@ -448,7 +448,7 @@ void recv_cli_cmd(int clifd)
                     }
                     sprintf(msg, "*** %s (#%d) just received from %s (#%d) by '%s' ***\n", shmdata[uid].name, uid, shmdata[pipefromuid].name, pipefromuid, curnode->cmdline);
                     yell(msg);
-                    execute_cmdline(parse_cmd_seq(line));
+                    execute_cmdline(argvs);
 
                     if(sbchk_flag == 2)    /* case cat >N <M */
                     {
@@ -513,7 +513,38 @@ void recv_cli_cmd(int clifd)
                         curnode->pipe_err = 1;
                     }
                 }
-                execute_cmdline(parse_cmd_seq(line));
+
+                char ***argvs = parse_cmd_seq(line);
+                char fifoname[8], msg[MAX_MSG_LEN];
+
+                int len = 0;
+                while(argvs[0][len])
+                {
+                    ++len;
+                }
+
+                int sbchk_flag = symbol_chk(argvs);
+                if(sbchk_flag == 1)    /* case: cmd <N |N */
+                {
+                    argvs[0][len-1] = NULL;
+                }
+                else if(sbchk_flag > 0)
+                {
+                    char* msg = "Illegal Symbol\n";
+                    write(clifd, msg, strlen(msg));
+                    return;
+                }
+                
+                execute_cmdline(argvs);
+                
+                if(sbchk_flag == 1)    /* case cat <N >M */
+                {
+                    sprintf(msg, "*** %s (#%d) just received from %s (#%d) by '%s' ***\n", shmdata[uid].name, uid, shmdata[sb_data].name, sb_data, curnode->cmdline);
+                    yell(msg);
+                    shmdata[uid].fifofd[sb_data] = -1;
+                    sprintf(fifoname, ".%dto%d", sb_data, uid);
+                    unlink(fifoname);
+                }
             }
 
             //print_lists(headnode);

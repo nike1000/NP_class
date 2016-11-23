@@ -377,7 +377,7 @@ void recv_cli_cmd(int clifd, int uid)
                 {
                     sprintf(msg, "*** %s (#%d) just received from %s (#%d) by '%s' ***\n", clidata[uid].name, uid, clidata[sb_data].name, sb_data, curnode->cmdline);
                     yell(msg);
-                    clidata[uid].fifofd[pipetouid] = -1;
+                    clidata[uid].fifofd[sb_data] = -1;
                     sprintf(fifoname, ".%dto%d", sb_data, uid);
                     unlink(fifoname);
                 }
@@ -434,10 +434,10 @@ void recv_cli_cmd(int clifd, int uid)
         }
         else if(reg_match(">[ ]*[^\\|/]+$", line))    /* match > to file at the end of line */
         {
-            char msg[MAX_MSG_LEN], fifoname[8];
             create_linenode(line, 0);
             curnode->filename = rm_fespace(get_filename(line));
             char*** argvs = parse_cmd_seq(line);
+            char msg[MAX_MSG_LEN], fifoname[8];
 
             int len = 0;
             while(argvs[0][len])
@@ -484,7 +484,37 @@ void recv_cli_cmd(int clifd, int uid)
                     curnode->pipe_err = 1;
                 }
             }
+            char*** argvs = parse_cmd_seq(line);
+            char msg[MAX_MSG_LEN], fifoname[8];
+            
+            int len = 0;
+            while(argvs[0][len])
+            {
+                ++len;
+            }
+
+            int sbchk_flag = symbol_chk(argvs);
+            if(sbchk_flag == 1)    /* case: cmd <N > file */
+            {
+                argvs[0][len-1] = NULL;
+                sprintf(msg, "*** %s (#%d) just received from %s (#%d) by '%s' ***\n", clidata[uid].name, uid, clidata[sb_data].name, sb_data, curnode->cmdline);
+                yell(msg);
+            }
+            else if(sbchk_flag > 0)
+            {
+                char* msg = "Illegal Symbol\n";
+                write(clidata[uid].clifd, msg, strlen(msg));
+                return;
+            }
+            
             execute_cmdline(parse_cmd_seq(line));
+            
+            if(sbchk_flag == 1)    /* case cat <N >M */
+            {
+                clidata[uid].fifofd[sb_data] = -1;
+                sprintf(fifoname, ".%dto%d", sb_data, uid);
+                unlink(fifoname);
+            }
         }
 
         //print_lists(headnode);
