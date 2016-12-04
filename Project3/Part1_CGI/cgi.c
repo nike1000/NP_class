@@ -13,6 +13,12 @@
 #define MAX_CLIENTS 5
 #define BUFFER_LEN 1024
 
+int parseQueryString();
+int responseHTML();
+int openBatchFile();
+int connectServer();
+int script_content(char *buffer, int id, int bold);
+
 typedef struct ClientInfo
 {
     int id;
@@ -21,6 +27,7 @@ typedef struct ClientInfo
     char host_port[6];
     char batch_file[32];
     int is_active;
+    FILE *batch_fp;
 } ClientInfo;
 
 ClientInfo clients[5];
@@ -29,6 +36,7 @@ int main()
 {
     parseQueryString();
     responseHTML();
+    openBatchFile();
     connectServer();
     printf("</body>\n");
     printf("</html>\n");
@@ -58,6 +66,7 @@ int parseQueryString()
             }
         }
     }
+    return 0;
 }
 
 int responseHTML()
@@ -65,10 +74,12 @@ int responseHTML()
     printf("Content-Type: text/html\n\n");
     printf("<html>\n");
     printf("<head>\n");
+    printf("<meta http-equiv=\"Content-Type\" content=\"text/html; charset=big5\" />\n");
     printf("<title>Network Programming Homework 3</title>\n");
     printf("</head>\n");
     printf("<body bgcolor=\"#336699\">\n");
-    printf("<table width=\"100%%\" border=\"1\">\n");
+    printf("<font face=\"Courier New\" size=2 color=#FFFF99>");
+    printf("<table width=\"800\" border=\"1\">\n");
     printf("<tr>\n");
 
     int i;
@@ -87,17 +98,36 @@ int responseHTML()
     {
         if (clients[i].is_active)
         {
-            printf("<td id=\"m%d\"></td>\n", i);
+            printf("<td valign=\"top\" id=\"m%d\"></td>\n", i);
         }
     }
     printf("</tr>\n");
     printf("</table>\n");
+    return 0;
+}
+
+int openBatchFile()
+{
+    int i;
+    for (i = 0; i < MAX_CLIENTS; i++)
+    {
+        if (clients[i].is_active)
+        {
+            if ((clients[i].batch_fp = fopen(clients[i].batch_file, "r")) == NULL)
+            {
+                fprintf(stderr, "fopen error:");
+                perror(strerror(errno));
+                clients[i].is_active = 0;
+            }
+        }
+    }
+    return 0;
 }
 
 int connectServer()
 {
     fd_set readfds, allfds;
-    int maxfdnum;
+    int maxfdnum = 0;
 
     /* clean FD set */
     FD_ZERO(&allfds);
@@ -113,6 +143,7 @@ int connectServer()
 
             if ((hostname = gethostbyname(clients[i].host_ip)) == NULL)
             {
+                fprintf(stderr, "gethostbyname error:");
                 perror(strerror(errno));
             }
             else
@@ -135,25 +166,16 @@ int connectServer()
                  */
                 if (errno != EINPROGRESS)
                 {
+                    fprintf(stderr, "connect error:");
                     perror(strerror(errno));
                     clients[i].is_active = 0;
                 }
-                else
-                {
-                    FD_SET(clients[i].clifd, &allfds); /* addclients[i].clifd in allfds set */
-                    if (clients[i].clifd > maxfdnum)
-                    {
-                        maxfdnum = clients[i].clifd;
-                    }
-                }
             }
-            else
+
+            FD_SET(clients[i].clifd, &allfds); /* addclients[i].clifd in allfds set */
+            if (clients[i].clifd > maxfdnum)
             {
-                FD_SET(clients[i].clifd, &allfds); /* addclients[i].clifd in allfds set */
-                if (clients[i].clifd > maxfdnum)
-                {
-                    maxfdnum = clients[i].clifd;
-                }
+                maxfdnum = clients[i].clifd;
             }
         }
     }
@@ -164,6 +186,7 @@ int connectServer()
 
         if (select(maxfdnum + 1, &readfds, NULL, NULL, NULL) < 0)
         {
+            fprintf(stderr, "select error:");
             perror(strerror(errno));
             exit(1);
         }
@@ -171,13 +194,39 @@ int connectServer()
         for (i = 0; i < MAX_CLIENTS; i++)
         {
             char buffer[BUFFER_LEN];
+            char *cmdline;
+            int cmdlen;
+
             if (clients[i].is_active)
             {
                 if (FD_ISSET(clients[i].clifd, &readfds))
                 {
-                    int bytes_read = read(clients[i].clifd, buffer, BUFFER_LEN);
-                    script_content(buffer, i);
-                    clients[i].is_active = 0;
+                    int error;
+                    socklen_t n = sizeof(error);
+                    if (getsockopt(clients[i].clifd, SOL_SOCKET, SO_ERROR, &error, &n) < 0 || error != 0)
+                    {
+                        // Non-blocking failed
+                        return -1;
+                    }
+
+                    int socketlen = read(clients[i].clifd, buffer, BUFFER_LEN);
+                    if (socketlen > 0)
+                    {
+                        buffer[socketlen] = '\0';
+                        script_content(buffer, i, 0);
+                        if (strncmp(buffer + socketlen - 2, "% ", 2) == 0)
+                        {
+                            getline(&cmdline, &cmdlen, clients[i].batch_fp);
+                            write(clients[i].clifd, cmdline, strlen(cmdline));
+                            script_content(cmdline, i, 1);
+                        }
+                    }
+                    else
+                    {
+                        FD_CLR(clients[i].clifd, &allfds);
+                        close(clients[i].clifd);
+                        clients[i].is_active = 0;
+                    }
                 }
             }
         }
@@ -188,13 +237,17 @@ int connectServer()
             running = running | clients[i].is_active;
         }
         if (!running)
+        {
             break;
+        }
     }
+
+    return 0;
 }
 
-int script_content(char *buffer, int id)
+int script_content(char *buffer, int id, int bold)
 {
-    printf("<script>document.getElementById(\"m%d\").innerHTML +=\"", id);
+    printf("<script>document.getElementById(\"m%d\").innerHTML +=\"%s", id, bold ? "<b>" : "");
 
     int i;
     for (i = 0; buffer[i] != '\0'; i++)
@@ -210,6 +263,8 @@ int script_content(char *buffer, int id)
             case ' ':
                 printf("&nbsp;");
                 break;
+            case '\r':
+                break;
             case '\n':
                 printf("<br>");
                 break;
@@ -224,5 +279,6 @@ int script_content(char *buffer, int id)
         }
     }
 
-    printf("\";</script>");
+    printf("%s\";</script>", bold ? "</b>" : "");
+    return 0;
 }
