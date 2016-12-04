@@ -1,14 +1,14 @@
+#include <errno.h>
+#include <fcntl.h>
+#include <netdb.h>
+#include <netinet/in.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <netdb.h>
-#include <netinet/in.h>
-#include <unistd.h>
-#include <fcntl.h>
-#include <sys/types.h>
-#include <sys/socket.h>
 #include <string.h>
-#include <errno.h>
+#include <sys/socket.h>
+#include <sys/types.h>
+#include <unistd.h>
 
 #define MAX_CLIENTS 5
 #define BUFFER_LEN 1024
@@ -21,9 +21,9 @@ typedef struct ClientInfo
     char host_port[6];
     char batch_file[32];
     int is_active;
-}ClientInfo;
+} ClientInfo;
 
-ClientInfo clients[5]; 
+ClientInfo clients[5];
 
 int main()
 {
@@ -36,19 +36,19 @@ int main()
 
 int parseQueryString()
 {
-    char* query_string = getenv("QUERY_STRING");
+    char *query_string = getenv("QUERY_STRING");
 
-    if(query_string != NULL)
+    if (query_string != NULL)
     {
         int i = 0;
-        for(i = 0; i < MAX_CLIENTS; i++)
+        for (i = 0; i < MAX_CLIENTS; i++)
         {
             clients[i].id = i;
-            strcpy(clients[i].host_ip, strtok((i == 0?query_string:NULL), "&")+3);
-            strcpy(clients[i].host_port, strtok(NULL, "&")+3);
-            strcpy(clients[i].batch_file, strtok(NULL, "&")+3);
-            
-            if(strlen(clients[i].host_ip) && strlen(clients[i].host_port) && strlen(clients[i].batch_file))
+            strcpy(clients[i].host_ip, strtok((i == 0 ? query_string : NULL), "&") + 3);
+            strcpy(clients[i].host_port, strtok(NULL, "&") + 3);
+            strcpy(clients[i].batch_file, strtok(NULL, "&") + 3);
+
+            if (strlen(clients[i].host_ip) && strlen(clients[i].host_port) && strlen(clients[i].batch_file))
             {
                 clients[i].is_active = 1;
             }
@@ -72,9 +72,9 @@ int responseHTML()
     printf("<tr>\n");
 
     int i;
-    for(i = 0; i < MAX_CLIENTS; i++)
+    for (i = 0; i < MAX_CLIENTS; i++)
     {
-        if(clients[i].is_active)
+        if (clients[i].is_active)
         {
             printf("<th>%s</th>\n", clients[i].host_ip);
         }
@@ -83,9 +83,9 @@ int responseHTML()
 
     printf("<tr>\n");
 
-    for(i = 0; i < MAX_CLIENTS; i++)
+    for (i = 0; i < MAX_CLIENTS; i++)
     {
-        if(clients[i].is_active)
+        if (clients[i].is_active)
         {
             printf("<td id=\"m%d\"></td>\n", i);
         }
@@ -104,21 +104,21 @@ int connectServer()
     FD_ZERO(&readfds);
 
     int i;
-    for(i = 0; i < MAX_CLIENTS; i++)
+    for (i = 0; i < MAX_CLIENTS; i++)
     {
-        if(clients[i].is_active)
+        if (clients[i].is_active)
         {
             struct hostent *hostname;
             struct sockaddr_in cli_addr;
 
-            if((hostname = gethostbyname(clients[i].host_ip)) == NULL)
+            if ((hostname = gethostbyname(clients[i].host_ip)) == NULL)
             {
                 perror(strerror(errno));
             }
             else
             {
                 clients[i].clifd = socket(AF_INET, SOCK_STREAM, 0);
-                memset((char *) &cli_addr, '\0', sizeof(cli_addr));    /* set serv_addr all bytes to zero*/
+                memset((char *)&cli_addr, '\0', sizeof(cli_addr)); /* set serv_addr all bytes to zero*/
                 cli_addr.sin_family = AF_INET;
                 memcpy(&cli_addr.sin_addr, hostname->h_addr_list[0], hostname->h_length);
                 /*cli_addr.sin_addr = *((struct in_addr *)hostname->h_addr);*/
@@ -133,15 +133,15 @@ int connectServer()
                 /* call connect on non-blocking mode,
                  * get EINPROGRESS instead of blocking waiting for the connection handshake to complete
                  */
-                if (errno != EINPROGRESS)    
+                if (errno != EINPROGRESS)
                 {
                     perror(strerror(errno));
                     clients[i].is_active = 0;
                 }
                 else
                 {
-                    FD_SET(clients[i].clifd, &allfds);    /* addclients[i].clifd in allfds set */
-                    if(clients[i].clifd > maxfdnum)
+                    FD_SET(clients[i].clifd, &allfds); /* addclients[i].clifd in allfds set */
+                    if (clients[i].clifd > maxfdnum)
                     {
                         maxfdnum = clients[i].clifd;
                     }
@@ -149,8 +149,8 @@ int connectServer()
             }
             else
             {
-                FD_SET(clients[i].clifd, &allfds);    /* addclients[i].clifd in allfds set */
-                if(clients[i].clifd > maxfdnum)
+                FD_SET(clients[i].clifd, &allfds); /* addclients[i].clifd in allfds set */
+                if (clients[i].clifd > maxfdnum)
                 {
                     maxfdnum = clients[i].clifd;
                 }
@@ -158,22 +158,22 @@ int connectServer()
         }
     }
 
-    for(;;)
+    for (;;)
     {
-        readfds = allfds;    /* select will change fd set, copy it */
+        readfds = allfds; /* select will change fd set, copy it */
 
-        if(select(maxfdnum+1, &readfds, NULL, NULL, NULL) < 0)
+        if (select(maxfdnum + 1, &readfds, NULL, NULL, NULL) < 0)
         {
             perror(strerror(errno));
             exit(1);
         }
-        
-        for(i = 0; i < MAX_CLIENTS; i++)
+
+        for (i = 0; i < MAX_CLIENTS; i++)
         {
             char buffer[BUFFER_LEN];
-            if(clients[i].is_active)
+            if (clients[i].is_active)
             {
-                if(FD_ISSET(clients[i].clifd, &readfds))
+                if (FD_ISSET(clients[i].clifd, &readfds))
                 {
                     int bytes_read = read(clients[i].clifd, buffer, BUFFER_LEN);
                     script_content(buffer, i);
@@ -187,18 +187,19 @@ int connectServer()
         {
             running = running | clients[i].is_active;
         }
-        if (!running) break;
+        if (!running)
+            break;
     }
 }
 
 int script_content(char *buffer, int id)
 {
     printf("<script>document.getElementById(\"m%d\").innerHTML +=\"", id);
-    
+
     int i;
     for (i = 0; buffer[i] != '\0'; i++)
     {
-        switch(buffer[i])
+        switch (buffer[i])
         {
             case '<':
                 printf("&lt");
