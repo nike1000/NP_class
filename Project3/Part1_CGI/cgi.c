@@ -12,12 +12,14 @@
 
 #define MAX_CLIENTS 5
 #define BUFFER_LEN 1024
+#define COLOR_WELCOME_MSG 1
 
 int parseQueryString();
 int responseHTML();
 int openBatchFile();
 int connectServer();
 int script_content(char *buffer, int id, int bold);
+int prompt_check(char *buffer);
 
 typedef struct ClientInfo
 {
@@ -38,12 +40,11 @@ int main()
     responseHTML();
     openBatchFile();
     connectServer();
-    printf("</body>\n");
-    printf("</html>\n");
 }
 
 int parseQueryString()
 {
+    /* QUERY_STRING: h1=npbsd3.cs.nctu.edu.tw&p1=6085&f1=t1.txt&h2=&p2=&f2=&h3=&p3=&f3=&h4=&p4=&f4=&h5=&p5=&f5= */
     char *query_string = getenv("QUERY_STRING");
 
     if (query_string != NULL)
@@ -52,10 +53,12 @@ int parseQueryString()
         for (i = 0; i < MAX_CLIENTS; i++)
         {
             clients[i].id = i;
+            /* +3 to remove h1= p1= f1= ... */
             strcpy(clients[i].host_ip, strtok((i == 0 ? query_string : NULL), "&") + 3);
             strcpy(clients[i].host_port, strtok(NULL, "&") + 3);
             strcpy(clients[i].batch_file, strtok(NULL, "&") + 3);
 
+            /* active only if host, port, file all complete */
             if (strlen(clients[i].host_ip) && strlen(clients[i].host_port) && strlen(clients[i].batch_file))
             {
                 clients[i].is_active = 1;
@@ -103,6 +106,8 @@ int responseHTML()
     }
     printf("</tr>\n");
     printf("</table>\n");
+    printf("</body>\n");
+    printf("</html>\n");
     return 0;
 }
 
@@ -113,6 +118,7 @@ int openBatchFile()
     {
         if (clients[i].is_active)
         {
+            /* inactive client if batch file can't read */
             if ((clients[i].batch_fp = fopen(clients[i].batch_file, "r")) == NULL)
             {
                 fprintf(stderr, "fopen error:");
@@ -151,8 +157,7 @@ int connectServer()
                 clients[i].clifd = socket(AF_INET, SOCK_STREAM, 0);
                 memset((char *)&cli_addr, '\0', sizeof(cli_addr)); /* set serv_addr all bytes to zero*/
                 cli_addr.sin_family = AF_INET;
-                memcpy(&cli_addr.sin_addr, hostname->h_addr_list[0], hostname->h_length);
-                /*cli_addr.sin_addr = *((struct in_addr *)hostname->h_addr);*/
+                cli_addr.sin_addr = *((struct in_addr *)hostname->h_addr);
                 cli_addr.sin_port = htons(atoi(clients[i].host_port));
 
                 int flags = fcntl(clients[i].clifd, F_GETFL, 0);
@@ -172,7 +177,7 @@ int connectServer()
                 }
             }
 
-            FD_SET(clients[i].clifd, &allfds); /* addclients[i].clifd in allfds set */
+            FD_SET(clients[i].clifd, &allfds); /* add clients[i].clifd in allfds set */
             if (clients[i].clifd > maxfdnum)
             {
                 maxfdnum = clients[i].clifd;
@@ -194,8 +199,13 @@ int connectServer()
         for (i = 0; i < MAX_CLIENTS; i++)
         {
             char buffer[BUFFER_LEN];
-            char *cmdline;
-            int cmdlen;
+
+            /* If *cmdline is NULL,
+             * then getline() will allocate a buffer for storing the line,
+             *  which should be freed by the user program,
+             *  otherwise getline() may core dump */
+            char *cmdline = NULL;
+            int cmdlen = 0;
 
             if (clients[i].is_active)
             {
@@ -205,8 +215,10 @@ int connectServer()
                     socklen_t n = sizeof(error);
                     if (getsockopt(clients[i].clifd, SOL_SOCKET, SO_ERROR, &error, &n) < 0 || error != 0)
                     {
-                        // Non-blocking failed
-                        return -1;
+                        /* Non-blocking failed */
+                        fprintf(stderr, "Non-blocking failed");
+                        perror(strerror(errno));
+                        continue;
                     }
 
                     int socketlen = read(clients[i].clifd, buffer, BUFFER_LEN);
@@ -214,11 +226,13 @@ int connectServer()
                     {
                         buffer[socketlen] = '\0';
                         script_content(buffer, i, 0);
-                        if (strncmp(buffer + socketlen - 2, "% ", 2) == 0)
+
+                        if (prompt_check(buffer))
                         {
                             getline(&cmdline, &cmdlen, clients[i].batch_fp);
                             write(clients[i].clifd, cmdline, strlen(cmdline));
                             script_content(cmdline, i, 1);
+                            free(cmdline);
                         }
                     }
                     else
@@ -228,6 +242,7 @@ int connectServer()
                         clients[i].is_active = 0;
                     }
                 }
+                fflush(stdout); /* flush output */
             }
         }
 
@@ -274,11 +289,69 @@ int script_content(char *buffer, int id, int bold)
             case '\"':
                 printf("&quot;");
                 break;
+            case '[':
+                if(!COLOR_WELCOME_MSG)
+                {
+                    printf("%c", buffer[i]);
+                    break;
+                }
+
+                if(strncmp(buffer+i, "[31m", 3) == 0)
+                {
+                    printf("<font color=\\\"red\\\">");
+                }
+                else if(strncmp(buffer+i, "[32m", 3) == 0)
+                {
+                    printf("<font color=\\\"green\\\">");
+                }
+                else if(strncmp(buffer+i, "[33m", 3) == 0)
+                {
+                    printf("<font color=\\\"yellow\\\">");
+                }
+                else if(strncmp(buffer+i, "[34m", 3) == 0)
+                {
+                    printf("<font color=\\\"blue\\\">");
+                }
+                else if(strncmp(buffer+i, "[35m", 3) == 0)
+                {
+                    printf("<font color=\\\"magenta\\\">");
+                }
+                else if(strncmp(buffer+i, "[36m", 3) == 0)
+                {
+                    printf("<font color=\\\"cyan\\\">");
+                }
+                else if(strncmp(buffer+i, "[0m", 2) == 0)
+                {
+                    printf("</font>");
+                    i+=2;
+                    break;
+                }
+                else
+                {
+                    printf("%c", buffer[i]);
+                    break;
+                }
+                i+=3;
+                break;
             default:
                 printf("%c", buffer[i]);
         }
     }
 
     printf("%s\";</script>", bold ? "</b>" : "");
+    return 0;
+}
+
+int prompt_check(char *buffer)
+{
+    int i;
+    for(i = 0; i < strlen(buffer)-1; i++)
+    {
+        if(buffer[i] == '%' && buffer[i+1] == ' ')
+        {
+            return 1;
+        }
+    }
+
     return 0;
 }
