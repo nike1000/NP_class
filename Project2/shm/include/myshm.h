@@ -1,9 +1,9 @@
 #ifndef MYSHM_H
 #define MYSHM_H
 
+#include <signal.h>
 #include <sys/ipc.h>
 #include <sys/shm.h>
-#include <signal.h>
 
 #define MAX_CLIENTS 31
 #define SHMKEY 999
@@ -14,9 +14,9 @@ void sigMsg(int);
 void sigPipe(int);
 int client_init(struct in_addr in, unsigned short in_port);
 void who();
-void name(char*);
-void yell(char*);
-void tell(char*, int);
+void name(char *);
+void yell(char *);
+void tell(char *, int);
 
 typedef struct CliInfo
 {
@@ -27,6 +27,6 @@ typedef struct CliInfo
     char ip[20];
     unsigned short port;
     int fifofd[MAX_CLIENTS];
-}CliInfo;
+} CliInfo;
 
 #endif
