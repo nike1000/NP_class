@@ -299,13 +299,9 @@ void recv_cli_cmd(int clifd)
             sprintf(buffer, "%s%s", tmpbuffer, append);
         }
 
-        char *line = strtok(buffer, delim);    /* for some program, we may receive more than one line with once client write */
-        if(!line)    /* just \r\n ,empty line, line will be NULL after strtok */
-        {
-            continue;
-        }
-
-        do
+        char *line, *last = NULL;
+        /* for some program, we may receive more than one line with once client write */
+        for(line = strtok_r(buffer, delim, &last); line; line = strtok_r(NULL, delim, &last))
         {
             line = rm_fespace(line);    /* to catch |N in the end of line, we remove all space at the end */
 
@@ -548,9 +544,7 @@ void recv_cli_cmd(int clifd)
             }
 
             //print_lists(headnode);
-
-            line = strtok(NULL, delim);
-        }while(line);// strtok return NULL when , NULL pointer is false
+        }
     }
 }
 
@@ -948,10 +942,11 @@ char ***parse_cmd_seq(char *str)
     static char *cmds[MAX_CMD_COUNT + 1];
     memset(cmds, '\0', sizeof(cmds));
 
-    cmds[0] = rm_fespace(strtok(str, "|"));
+    char *last = NULL;
+    cmds[0] = rm_fespace(strtok_r(str, "|", &last));
     for (i = 1; i <= MAX_CMD_COUNT; ++i)
     {
-        cmds[i] = rm_fespace(strtok(NULL, "|"));
+        cmds[i] = rm_fespace(strtok_r(NULL, "|", &last));
         if (cmds[i] == NULL)
         {
             break;
@@ -984,10 +979,10 @@ char ***parse_cmd_seq(char *str)
     {
         argvs[i] = argvs_array[i];
 
-        argvs[i][0] = strtok(cmds[i], " \t\n\r");
+        argvs[i][0] = strtok_r(cmds[i], " \t\n\r", &last);
         for (j = 1; j <= MAX_ARG_COUNT; ++j)
         {
-            argvs[i][j] = strtok(NULL, " \t\n\r");
+            argvs[i][j] = strtok_r(NULL, " \t\n\r", &last);
             if (argvs[i][j] == NULL)
             {
                 break;
