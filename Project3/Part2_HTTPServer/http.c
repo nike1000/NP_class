@@ -203,6 +203,7 @@ int handleRequest(Header request, int clifd)
                 }
                 else if (fork_pid > 0)
                 {
+                    close(clifd);
                     if (waitpid(fork_pid, NULL, 0) != fork_pid)
                     {
                         perror(strerror(errno));

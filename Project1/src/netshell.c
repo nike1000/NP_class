@@ -60,16 +60,16 @@ int start_server()
     serv_addr.sin_addr.s_addr = htonl(INADDR_ANY);    /* INADDR_ANY for listening on any IP address */
     serv_addr.sin_port = htons(SERV_TCP_PORT);    /* Server port number */
 
-    if(bind(sockfd, (struct sockaddr *) &serv_addr, sizeof(struct sockaddr)) < 0)    /* -1 if bind fail, 0 if success */
-    {
-        err_dump("server: can't bind local address");
-    }
-
     int yes = 1;
     /* lose the pesky "Address already in use" error message */
     if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &yes,sizeof(int)) == -1)
     {
         err_dump("server: can't set SO_REUSEADDR");
+    }
+
+    if(bind(sockfd, (struct sockaddr *) &serv_addr, sizeof(struct sockaddr)) < 0)    /* -1 if bind fail, 0 if success */
+    {
+        err_dump("server: can't bind local address");
     }
 
     if(listen(sockfd, MAXCONN) < 0)    /* -1 if listen fail, 0 if success */
