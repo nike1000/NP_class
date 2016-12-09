@@ -162,18 +162,18 @@ int connectServer()
 
                 int flags = fcntl(clients[i].clifd, F_GETFL, 0);
                 fcntl(clients[i].clifd, F_SETFL, flags | O_NONBLOCK);
-            }
 
-            if (connect(clients[i].clifd, (struct sockaddr *)&cli_addr, sizeof(cli_addr)) < 0)
-            {
-                /* call connect on non-blocking mode,
-                 * get EINPROGRESS instead of blocking waiting for the connection handshake to complete
-                 */
-                if (errno != EINPROGRESS)
+                if (connect(clients[i].clifd, (struct sockaddr *)&cli_addr, sizeof(cli_addr)) < 0)
                 {
-                    fprintf(stderr, "connect error:");
-                    perror(strerror(errno));
-                    clients[i].is_active = 0;
+                    /* call connect on non-blocking mode,
+                     * get EINPROGRESS instead of blocking waiting for the connection handshake to complete
+                     */
+                    if (errno != EINPROGRESS)
+                    {
+                        fprintf(stderr, "connect error:");
+                        perror(strerror(errno));
+                        clients[i].is_active = 0;
+                    }
                 }
             }
 

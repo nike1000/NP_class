@@ -236,10 +236,12 @@ int handleRequest(Header request, int clifd)
                 char read_buffer[1024];
                 int read_len;
                 int readfd = open(request.path, O_RDONLY);
-                while ((read_len = read(readfd, buffer, 1024)) > 0)
+                while ((read_len = read(readfd, read_buffer, 1024)) > 0)
                 {
-                    write(clifd, buffer, read_len);
+                    write(clifd, read_buffer, read_len);
                 }
+
+                close(readfd);
             }
         }
         else
