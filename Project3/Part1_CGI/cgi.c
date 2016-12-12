@@ -296,40 +296,40 @@ int script_content(char *buffer, int id, int bold)
                 printf("&quot;");
                 break;
             case '[':
-                if(!COLOR_WELCOME_MSG)
+                if (!COLOR_WELCOME_MSG)
                 {
                     printf("%c", buffer[i]);
                     break;
                 }
 
-                if(strncmp(buffer+i, "[31m", 3) == 0)
+                if (strncmp(buffer + i, "[31m", 3) == 0)
                 {
                     printf("<font color=\\\"red\\\">");
                 }
-                else if(strncmp(buffer+i, "[32m", 3) == 0)
+                else if (strncmp(buffer + i, "[32m", 3) == 0)
                 {
                     printf("<font color=\\\"green\\\">");
                 }
-                else if(strncmp(buffer+i, "[33m", 3) == 0)
+                else if (strncmp(buffer + i, "[33m", 3) == 0)
                 {
                     printf("<font color=\\\"yellow\\\">");
                 }
-                else if(strncmp(buffer+i, "[34m", 3) == 0)
+                else if (strncmp(buffer + i, "[34m", 3) == 0)
                 {
                     printf("<font color=\\\"blue\\\">");
                 }
-                else if(strncmp(buffer+i, "[35m", 3) == 0)
+                else if (strncmp(buffer + i, "[35m", 3) == 0)
                 {
                     printf("<font color=\\\"magenta\\\">");
                 }
-                else if(strncmp(buffer+i, "[36m", 3) == 0)
+                else if (strncmp(buffer + i, "[36m", 3) == 0)
                 {
                     printf("<font color=\\\"cyan\\\">");
                 }
-                else if(strncmp(buffer+i, "[0m", 2) == 0)
+                else if (strncmp(buffer + i, "[0m", 2) == 0)
                 {
                     printf("</font>");
-                    i+=2;
+                    i += 2;
                     break;
                 }
                 else
@@ -337,7 +337,7 @@ int script_content(char *buffer, int id, int bold)
                     printf("%c", buffer[i]);
                     break;
                 }
-                i+=3;
+                i += 3;
                 break;
             default:
                 printf("%c", buffer[i]);
@@ -351,9 +351,9 @@ int script_content(char *buffer, int id, int bold)
 int prompt_check(char *buffer)
 {
     int i;
-    for(i = 0; i < strlen(buffer)-1; i++)
+    for (i = 0; i < strlen(buffer) - 1; i++)
     {
-        if(buffer[i] == '%' && buffer[i+1] == ' ')
+        if (buffer[i] == '%' && buffer[i + 1] == ' ')
         {
             return 1;
         }

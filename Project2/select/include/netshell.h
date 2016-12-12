@@ -1,29 +1,29 @@
 #ifndef NETSHELL_H
 #define NETSHELL_H
 
-#include <sys/types.h>
+#include "li3.h"
+#include <arpa/inet.h>
 #include <ctype.h>
-#include <sys/wait.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <netinet/in.h>
+#include <regex.h>
+#include <string.h>
+#include <sys/select.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
-#include <string.h>
-#include <netinet/in.h>
-#include <arpa/inet.h>
-#include <unistd.h>
-#include <regex.h>
-#include <fcntl.h>
-#include <errno.h>
-#include <sys/select.h>
 #include <sys/time.h>
-#include "li3.h"
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <unistd.h>
 
-#define ANSI_COLOR_RED     "\x1b[31m"
-#define ANSI_COLOR_GREEN   "\x1b[32m"
-#define ANSI_COLOR_YELLOW  "\x1b[33m"
-#define ANSI_COLOR_BLUE    "\x1b[34m"
+#define ANSI_COLOR_RED "\x1b[31m"
+#define ANSI_COLOR_GREEN "\x1b[32m"
+#define ANSI_COLOR_YELLOW "\x1b[33m"
+#define ANSI_COLOR_BLUE "\x1b[34m"
 #define ANSI_COLOR_MAGENTA "\x1b[35m"
-#define ANSI_COLOR_CYAN    "\x1b[36m"
-#define ANSI_COLOR_RESET   "\x1b[0m"
+#define ANSI_COLOR_CYAN "\x1b[36m"
+#define ANSI_COLOR_RESET "\x1b[0m"
 
 #define SERV_TCP_PORT 6085
 #define MAXCONN 5
@@ -32,7 +32,6 @@
 #define MAX_CMD_COUNT 15000
 #define MAX_CLIENTS 31
 #define MAX_MSG_LEN 1024
-
 
 #define PROMOT "% "
 #define WELCOME_MSG "****************************************\n"\
@@ -48,18 +47,18 @@ void set_clienv(int);
 void clean_clienv(int);
 void recv_cli_cmd(int, int);
 void clean_cli(int);
-void create_linenode(char *,int);
+void create_linenode(char *, int);
 char *rm_fespace(char *);
-int reg_match(char *, char*);
-char* get_filename(char *);
+int reg_match(char *, char *);
+char *get_filename(char *);
 int get_endnum(char *);
 char ***parse_cmd_seq(char *);
 void execute_cmdline(char ***);
 void creat_proc(char **argv, int fd_in, int fd_out, int fd_err, int pipes_count, int pipes_fd[][2]);
 void who();
-void name(char*);
-void yell(char*);
-void tell(char*, int);
+void name(char *);
+void yell(char *);
+void tell(char *, int);
 
 typedef struct CliInfo
 {
@@ -69,13 +68,13 @@ typedef struct CliInfo
     char ip[20];
     unsigned short port;
     int fifofd[MAX_CLIENTS];
-    LineNode* headnode;
-    LineNode* curnode;
-    LineNode* tailnode;
+    LineNode *headnode;
+    LineNode *curnode;
+    LineNode *tailnode;
     int linecount;
-    char* env[MAX_CLIENTS];
-    char* env_val[MAX_CLIENTS];
+    char *env[MAX_CLIENTS];
+    char *env_val[MAX_CLIENTS];
     int env_count;
-}CliInfo;
+} CliInfo;
 
 #endif

@@ -7,17 +7,17 @@
 typedef struct linenode
 {
     int linenum;
-    char* cmdline;
+    char *cmdline;
     int pipeto;
     int pipe_err;
     int fd_tofile;
-    char* filename;
+    char *filename;
     int fd_readout;
     int fd_writein;
-    struct linenode* nextPtr;
-}linenode;
+    struct linenode *nextPtr;
+} linenode;
 
-linenode* create_node(int, char*, int);
+linenode *create_node(int, char *, int);
 void insert_node(linenode *, linenode *);
 void remove_node(linenode *);
 void print_lists(linenode *);
