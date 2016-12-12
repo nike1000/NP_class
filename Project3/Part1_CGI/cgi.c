@@ -230,7 +230,13 @@ int connectServer()
                         if (prompt_check(buffer))
                         {
                             getline(&cmdline, &cmdlen, clients[i].batch_fp);
-                            write(clients[i].clifd, cmdline, strlen(cmdline));
+                            int w = write(clients[i].clifd, cmdline, strlen(cmdline));
+                            while(w < 0)
+                            {
+                                sleep(1);
+                                w = write(clients[i].clifd, cmdline, strlen(cmdline));
+                            }
+
                             script_content(cmdline, i, 1);
                             free(cmdline);
                         }
