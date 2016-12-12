@@ -585,7 +585,12 @@ BOOL CALLBACK MainDlgProc(HWND hwnd, UINT Message, WPARAM wParam, LPARAM lParam)
                                 if (prompt_check(buffer))
                                 {
                                     fgets(cmdline, strlen(cmdline), web[index].clients[i].batch_fp);
-                                    send(web[index].clients[i].clifd, cmdline, strlen(cmdline), 0);
+                                    int w = send(web[index].clients[i].clifd, cmdline, strlen(cmdline), 0);
+                                    if(w < 0)
+                                    {
+                                        Sleep(1000);
+                                        w = send(web[index].clients[i].clifd, cmdline, strlen(cmdline), 0);
+                                    }
                                     script_content(cmdline, i, 1, web[index].websocket);
                                 }
                             }
