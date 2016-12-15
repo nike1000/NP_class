@@ -1,2 +1,2 @@
 all:
-	gcc cgi.c -o hw3.cgi
+	gcc cgi.c -o ../public_html/hw3.cgi
