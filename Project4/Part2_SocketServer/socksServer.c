@@ -1,23 +1,25 @@
 #include "socksServer.h"
 
-Connection cnt;
+Connection cnt; /* socks connection info */
+FirewallRule rules[MAX_RULE];
 
 int main()
 {
+    int rulesum = getFirewallRules();
     int clifd = startSerever();
     Socks4Packet pkt = handleSocksRequest(clifd);
     printf("\nVN: %u, CD: %u, DST IP: %s, DST PORT: %s, USERID: %x\n", pkt.vn, pkt.cd, cnt.dstip, cnt.dstport, pkt.userid);
-    //if(firewallAccessCheck(pkt))
-    if(1)
+
+    if(firewallAccessCheck(rulesum)) /* Permit, Pass FireWall */
     {
         printf("Permit Src = %s(%s), Dst = %s(%s)\n", cnt.srcip, cnt.srcport, cnt.dstip, cnt.dstport);
-        if(pkt.cd == 1) /* CONNECT MODE */
+        if(pkt.cd == 1) /* SOCKS CONNECT MODE */
         {
-            printf("SOCKS_CONNECT GRANTED...\n");
             int serfd = connectTCP(cnt.dstip, cnt.dstport);
             if(serfd == -1)
             {
                 /* TODO: send socks reply, request fail */
+                printf("SOCKS_CONNECT FAIL...\n");
                 socksConnectReply(pkt, 91, clifd);
                 close(clifd);
             }
@@ -25,13 +27,13 @@ int main()
             {
                 /* TODO: send socks reply, request grant
                  *       redirect data */
+                printf("SOCKS_CONNECT GRANTED...\n");
                 socksConnectReply(pkt, 90, clifd);
                 doRedirect(clifd ,serfd);
             }
         }
-        else if(pkt.cd == 2) /* BIND MODE */
+        else if(pkt.cd == 2) /* SOCKS BIND MODE */
         {
-            printf("SOCKS_BIND GRANTED...\n");
             int port;
             int serfd, bindfd;
             struct sockaddr_in ser_addr;
@@ -53,11 +55,13 @@ int main()
 
             if(bindfd == -1)
             {
+                printf("SOCKS_BIND FAIL...\n");
                 socksBindReply(port, 91, clifd);
                 close(clifd);
             }
             else
             {
+                printf("SOCKS_BIND GRANTED...\n");
                 socksBindReply(port, 90, clifd);
 
                 if((serfd = accept(bindfd, (struct sockaddr *)&ser_addr, &serlen)) < 0)
@@ -74,6 +78,7 @@ int main()
         else
         {
             /* TODO: send socks reply, request fail */
+            printf("Socks mode refused\n");
             socksConnectReply(pkt, 91, clifd);
             close(clifd);
         }
@@ -87,6 +92,74 @@ int main()
     }
 
     exit(0);
+}
+
+int getFirewallRules()
+{
+    FILE *conf_fp;
+    if ((conf_fp = fopen(FIREWALL_CONF, "r")) == NULL)
+    {
+        fprintf(stderr, "fopen error:");
+        perror(strerror(errno));
+        return 0;
+    }
+    else
+    {
+        char *rule = NULL;
+        int len = 0;
+        int i = 0;
+
+        while(getline(&rule, &len, conf_fp) > 0)
+        {
+            char *delim = " /\r\n";
+            char *tmp, *last = NULL;
+            struct in_addr addr;
+
+            if(strlen(rule) < 6 ||strcmp(strtok_r(rule, delim, &last), "permit") != 0) /* if rule not start with permit,then ignore. strlen use to handle empty line */
+            {
+                continue;
+            }
+
+            strcpy(rules[i].mode, strtok_r(NULL, delim, &last)); /* socks mode: c or b */
+
+            tmp = strtok_r(NULL, delim, &last); /* src ip */
+            inet_aton(tmp, &addr);
+            if(strcmp(tmp, "-") == 0) /* permit all src ip */
+            {
+                rules[i].srcmask = 0x00000000; /* src mask */
+            }
+            else
+            {
+                rules[i].srcmask = 0xffffffff << (32 - atoi(strtok_r(NULL, delim, &last))); /* get CIDR submask */
+            }
+
+            rules[i].srcip = ntohl(addr.s_addr) & rules[i].srcmask;
+            strcpy(rules[i].srcport, strtok_r(NULL, delim, &last)); /* src port */
+
+            tmp = strtok_r(NULL, delim, &last);
+            inet_aton(tmp, &addr);
+
+            if(strcmp(tmp, "-") == 0) /* permit all dst ip */
+            {
+                rules[i].dstmask = 0x00000000; /* dst mask */
+            }
+            else
+            {
+                rules[i].dstmask = 0xffffffff << (32 - atoi(strtok_r(NULL, delim, &last))); /* get CIDR submask */
+            }
+
+            rules[i].dstip = ntohl(addr.s_addr) & rules[i].dstmask;
+            strcpy(rules[i].dstport, strtok_r(NULL, delim, &last)); /* dst port */
+            printf("RULE: %s %x %s %x %s\n", rules[i].mode, rules[i].srcip, rules[i].srcport, rules[i].dstip, rules[i].dstport);
+            i++;
+
+            if(i >= MAX_RULE)
+            {
+                break;
+            }
+        }
+        return i;
+    }
 }
 
 int startSerever()
@@ -189,6 +262,7 @@ Socks4Packet handleSocksRequest(int clifd)
     {
         if(socks4_request[0] != 4) /* not socks version 4 packet */
         {
+            printf("Not Socks4 Request\n");
             exit(0);
         }
 
@@ -225,10 +299,62 @@ Socks4Packet handleSocksRequest(int clifd)
             }
     }
 
+    cnt.mode = pkt.cd == 1 ? "c" : "b";
     sprintf(cnt.dstip, "%u.%u.%u.%u", pkt.dstip[0], pkt.dstip[1], pkt.dstip[2], pkt.dstip[3]);
     sprintf(cnt.dstport, "%d", pkt.dstport[0]*256+pkt.dstport[1]);
 
     return pkt;
+}
+
+int firewallAccessCheck(int sum)
+{
+    struct in_addr addr;
+    int permit = 0;
+
+    inet_aton(cnt.srcip, &addr); /* convert srcip from string format with dot to binary */
+    unsigned int srcip = ntohl(addr.s_addr); /* network byte order to hosts byte order */
+    inet_aton(cnt.dstip, &addr); /* convert dstip from string format with dot to binary */
+    unsigned int dstip = ntohl(addr.s_addr); /* network byte order to hosts byte order */
+
+    int i = 0;
+    while(i < sum && !permit) /* still have rule, and connection not accept yet */
+    {
+        if(strcmp(cnt.mode, rules[i].mode) != 0)
+        {
+            i++;
+            continue;
+        }
+
+        /*printf("SRC IP:%x , %x\n", srcip & rules[i].srcmask, rules[i].srcip);*/
+        if((srcip & rules[i].srcmask) != rules[i].srcip)
+        {
+            i++;
+            continue;
+        }
+
+        if(strcmp(rules[i].srcport, "-") != 0 && strcmp(cnt.srcport ,rules[i].srcport) != 0)
+        {
+            i++;
+            continue;
+        }
+
+        /*printf("DST IP:%x , %x\n", dstip & rules[i].dstmask, rules[i].dstip);*/
+        if((dstip & rules[i].dstmask) != rules[i].dstip)
+        {
+            i++;
+            continue;
+        }
+
+        if(strcmp(rules[i].dstport, "-") != 0 && strcmp(cnt.dstport ,rules[i].dstport) != 0)
+        {
+            i++;
+            continue;
+        }
+
+        permit = 1; /* permit if match all field */
+    }
+
+    return permit;
 }
 
 int socksConnectReply(Socks4Packet request, int status, int fd)
@@ -257,11 +383,6 @@ int socksBindReply(int port, int status, int fd)
     socks4_reply[6] = 0;
     socks4_reply[7] = 0;
     write(fd, socks4_reply, 8);
-}
-
-int firewallAccessCheck(Socks4Packet pkt)
-{
-
 }
 
 int connectTCP(char* dstip, char* dstport)
