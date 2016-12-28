@@ -6,7 +6,7 @@ int main()
 {
     int clifd = startSerever();
     Socks4Packet pkt = handleSocksRequest(clifd);
-    printf("VN: %u, CD: %u, DST IP: %s, DST PORT: %s, USERID: %s\n", pkt.vn, pkt.cd, cnt.dstip, cnt.dstport, pkt.userid);
+    printf("\nVN: %u, CD: %u, DST IP: %s, DST PORT: %s, USERID: %x\n", pkt.vn, pkt.cd, cnt.dstip, cnt.dstport, pkt.userid);
     //if(firewallAccessCheck(pkt))
     if(1)
     {
@@ -34,11 +34,22 @@ int main()
             printf("SOCKS_BIND GRANTED...\n");
             int port;
             int serfd, bindfd;
-            socklen_t serlen;
             struct sockaddr_in ser_addr;
+            socklen_t serlen = sizeof(ser_addr);
 
-            port = randomPort();
-            bindfd = passiveTCP(port);
+            bindfd = passiveTCP();
+
+            if(getsockname(bindfd, (struct sockaddr *)&ser_addr, &serlen) == -1)
+            {
+                fprintf(stderr, "getsocketname error:");
+                perror(strerror(errno));
+                return -1;
+            }
+            else
+            {
+                port = ntohs(ser_addr.sin_port);
+                printf("Bind Port: %d\n", ntohs(ser_addr.sin_port));
+            }
 
             if(bindfd == -1)
             {
@@ -262,17 +273,22 @@ int connectTCP(char* dstip, char* dstport)
     serv_addr.sin_addr.s_addr = inet_addr(dstip);
     serv_addr.sin_port = htons(atoi(dstport));
 
+    /*int flags = fcntl(serfd, F_GETFL, 0);*/
+    /*fcntl(serfd, F_SETFL, flags | O_NONBLOCK);*/
+
+    /*connect(serfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr));*/
+    /*return serfd;*/
     return connect(serfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0 ? -1 : serfd;
 }
 
-int passiveTCP(int port)
+int passiveTCP()
 {
     struct sockaddr_in bind_addr;
     int bindfd = socket(AF_INET, SOCK_STREAM, 0);
     memset((char *)&bind_addr, '\0', sizeof(bind_addr)); /* set bind_addr all bytes to zero*/
     bind_addr.sin_family = AF_INET;
     bind_addr.sin_addr.s_addr = htonl(INADDR_ANY);
-    bind_addr.sin_port = htons(port);
+    bind_addr.sin_port = htons(0);
 
     int yes = 1;
     /* lose the pesky "Address already in use" error message */
@@ -299,13 +315,6 @@ int passiveTCP(int port)
     }
 
     return bindfd;
-}
-
-int randomPort()
-{
-    srand(time(NULL));
-    int port = 1024 + rand() % 60000;
-    return port;
 }
 
 int doRedirect(int clifd, int serfd)
@@ -352,7 +361,8 @@ int doRedirect(int clifd, int serfd)
                 write(serfd, buffer, len);
             }
         }
-        else if (FD_ISSET(serfd, &readfds))
+
+        if (FD_ISSET(serfd, &readfds))
         {
             len = read(serfd, buffer, BUFFER_LEN);
             /*fprintf(stderr, "==========>SER READ:%d\n", len);*/
