@@ -10,13 +10,13 @@ int main()
     Socks4Packet pkt = handleSocksRequest(clifd);
     printf("\nVN: %u, CD: %u, DST IP: %s, DST PORT: %s, USERID: %x\n", pkt.vn, pkt.cd, cnt.dstip, cnt.dstport, pkt.userid);
 
-    if(firewallAccessCheck(rulesum)) /* Permit, Pass FireWall */
+    if (firewallAccessCheck(rulesum)) /* Permit, Pass FireWall */
     {
         printf("Permit Src = %s(%s), Dst = %s(%s)\n", cnt.srcip, cnt.srcport, cnt.dstip, cnt.dstport);
-        if(pkt.cd == 1) /* SOCKS CONNECT MODE */
+        if (pkt.cd == 1) /* SOCKS CONNECT MODE */
         {
             int serfd = connectTCP(cnt.dstip, cnt.dstport);
-            if(serfd == -1)
+            if (serfd == -1)
             {
                 /* TODO: send socks reply, request fail */
                 printf("SOCKS_CONNECT FAIL...\n");
@@ -29,10 +29,10 @@ int main()
                  *       redirect data */
                 printf("SOCKS_CONNECT GRANTED...\n");
                 socksConnectReply(pkt, 90, clifd);
-                doRedirect(clifd ,serfd);
+                doRedirect(clifd, serfd);
             }
         }
-        else if(pkt.cd == 2) /* SOCKS BIND MODE */
+        else if (pkt.cd == 2) /* SOCKS BIND MODE */
         {
             int port;
             int serfd, bindfd;
@@ -41,7 +41,7 @@ int main()
 
             bindfd = passiveTCP();
 
-            if(getsockname(bindfd, (struct sockaddr *)&ser_addr, &serlen) == -1)
+            if (getsockname(bindfd, (struct sockaddr *)&ser_addr, &serlen) == -1)
             {
                 fprintf(stderr, "getsocketname error:");
                 perror(strerror(errno));
@@ -53,7 +53,7 @@ int main()
                 printf("Bind Port: %d\n", ntohs(ser_addr.sin_port));
             }
 
-            if(bindfd == -1)
+            if (bindfd == -1)
             {
                 printf("SOCKS_BIND FAIL...\n");
                 socksBindReply(port, 91, clifd);
@@ -64,7 +64,7 @@ int main()
                 printf("SOCKS_BIND GRANTED...\n");
                 socksBindReply(port, 90, clifd);
 
-                if((serfd = accept(bindfd, (struct sockaddr *)&ser_addr, &serlen)) < 0)
+                if ((serfd = accept(bindfd, (struct sockaddr *)&ser_addr, &serlen)) < 0)
                 {
                     fprintf(stderr, "bind accept error\n");
                     perror(strerror(errno));
@@ -109,13 +109,13 @@ int getFirewallRules()
         int len = 0;
         int i = 0;
 
-        while(getline(&rule, &len, conf_fp) > 0)
+        while (getline(&rule, &len, conf_fp) > 0)
         {
             char *delim = " /\r\n";
             char *tmp, *last = NULL;
             struct in_addr addr;
 
-            if(strlen(rule) < 6 ||strcmp(strtok_r(rule, delim, &last), "permit") != 0) /* if rule not start with permit,then ignore. strlen use to handle empty line */
+            if (strlen(rule) < 6 || strcmp(strtok_r(rule, delim, &last), "permit") != 0) /* if rule not start with permit,then ignore. strlen use to handle empty line */
             {
                 continue;
             }
@@ -124,7 +124,7 @@ int getFirewallRules()
 
             tmp = strtok_r(NULL, delim, &last); /* src ip */
             inet_aton(tmp, &addr);
-            if(strcmp(tmp, "-") == 0) /* permit all src ip */
+            if (strcmp(tmp, "-") == 0) /* permit all src ip */
             {
                 rules[i].srcmask = 0x00000000; /* src mask */
             }
@@ -139,7 +139,7 @@ int getFirewallRules()
             tmp = strtok_r(NULL, delim, &last);
             inet_aton(tmp, &addr);
 
-            if(strcmp(tmp, "-") == 0) /* permit all dst ip */
+            if (strcmp(tmp, "-") == 0) /* permit all dst ip */
             {
                 rules[i].dstmask = 0x00000000; /* dst mask */
             }
@@ -153,7 +153,7 @@ int getFirewallRules()
             printf("RULE: %s %x %s %x %s\n", rules[i].mode, rules[i].srcip, rules[i].srcport, rules[i].dstip, rules[i].dstport);
             i++;
 
-            if(i >= MAX_RULE)
+            if (i >= MAX_RULE)
             {
                 break;
             }
@@ -168,7 +168,7 @@ int startSerever()
     struct sockaddr_in serv_addr, cli_addr;
 
     sockfd = socket(AF_INET, SOCK_STREAM, 0);
-    if(sockfd < 0)
+    if (sockfd < 0)
     {
         fprintf(stderr, "socket error\n");
         perror(strerror(errno));
@@ -203,7 +203,7 @@ int startSerever()
         exit(1);
     }
 
-	for (;;)
+    for (;;)
     {
         socklen_t clilen = sizeof(cli_addr);
         int clifd = accept(sockfd, (struct sockaddr *)&cli_addr, &clilen); /* accept client connection */
@@ -260,7 +260,7 @@ Socks4Packet handleSocksRequest(int clifd)
     int len;
     if ((len = read(clifd, socks4_request, MAX_SOCKS_LEN)) > 0)
     {
-        if(socks4_request[0] != 4) /* not socks version 4 packet */
+        if (socks4_request[0] != 4) /* not socks version 4 packet */
         {
             printf("Not Socks4 Request\n");
             exit(0);
@@ -277,31 +277,31 @@ Socks4Packet handleSocksRequest(int clifd)
         pkt.userid = socks4_request + 8;
     }
 
-    if(!(pkt.dstip[0] || pkt.dstip[1] || pkt.dstip[2]) && pkt.dstip[3]) /* dst ip 0.0.0.x */
+    if (!(pkt.dstip[0] || pkt.dstip[1] || pkt.dstip[2]) && pkt.dstip[3]) /* dst ip 0.0.0.x */
     {
-            pkt.hostname = pkt.userid + strlen(pkt.userid) + 1; /* get hostname after userid */
+        pkt.hostname = pkt.userid + strlen(pkt.userid) + 1; /* get hostname after userid */
 
-            struct hostent *he = NULL;
-            if ((he = gethostbyname((const char*)pkt.hostname)) == NULL)
+        struct hostent *he = NULL;
+        if ((he = gethostbyname((const char *)pkt.hostname)) == NULL)
+        {
+            fprintf(stderr, "gethostbyname error:");
+            perror(strerror(errno));
+        }
+        else
+        {
+            char *dstip = inet_ntoa(*((struct in_addr *)he->h_addr)); /* get IP */
+            int i;
+            char *iptoken;
+            for (i = 0, iptoken = strtok(dstip, ".\r\n"); i <= 3 && iptoken; i++, iptoken = strtok(NULL, ".\r\n"))
             {
-                fprintf(stderr, "gethostbyname error:");
-                perror(strerror(errno));
+                pkt.dstip[i] = atoi(iptoken);
             }
-            else
-            {
-                char *dstip = inet_ntoa(*((struct in_addr *)he->h_addr)); /* get IP */
-                int i;
-                char *iptoken;
-                for(i = 0, iptoken = strtok(dstip, ".\r\n"); i <= 3 && iptoken; i++, iptoken = strtok(NULL, ".\r\n"))
-                {
-                    pkt.dstip[i] = atoi(iptoken);
-                }
-            }
+        }
     }
 
     cnt.mode = pkt.cd == 1 ? "c" : "b";
     sprintf(cnt.dstip, "%u.%u.%u.%u", pkt.dstip[0], pkt.dstip[1], pkt.dstip[2], pkt.dstip[3]);
-    sprintf(cnt.dstport, "%d", pkt.dstport[0]*256+pkt.dstport[1]);
+    sprintf(cnt.dstport, "%d", pkt.dstport[0] * 256 + pkt.dstport[1]);
 
     return pkt;
 }
@@ -311,41 +311,41 @@ int firewallAccessCheck(int sum)
     struct in_addr addr;
     int permit = 0;
 
-    inet_aton(cnt.srcip, &addr); /* convert srcip from string format with dot to binary */
+    inet_aton(cnt.srcip, &addr);             /* convert srcip from string format with dot to binary */
     unsigned int srcip = ntohl(addr.s_addr); /* network byte order to hosts byte order */
-    inet_aton(cnt.dstip, &addr); /* convert dstip from string format with dot to binary */
+    inet_aton(cnt.dstip, &addr);             /* convert dstip from string format with dot to binary */
     unsigned int dstip = ntohl(addr.s_addr); /* network byte order to hosts byte order */
 
     int i = 0;
-    while(i < sum && !permit) /* still have rule, and connection not accept yet */
+    while (i < sum && !permit) /* still have rule, and connection not accept yet */
     {
-        if(strcmp(cnt.mode, rules[i].mode) != 0)
+        if (strcmp(cnt.mode, rules[i].mode) != 0)
         {
             i++;
             continue;
         }
 
         /*printf("SRC IP:%x , %x\n", srcip & rules[i].srcmask, rules[i].srcip);*/
-        if((srcip & rules[i].srcmask) != rules[i].srcip)
+        if ((srcip & rules[i].srcmask) != rules[i].srcip)
         {
             i++;
             continue;
         }
 
-        if(strcmp(rules[i].srcport, "-") != 0 && strcmp(cnt.srcport ,rules[i].srcport) != 0)
+        if (strcmp(rules[i].srcport, "-") != 0 && strcmp(cnt.srcport, rules[i].srcport) != 0)
         {
             i++;
             continue;
         }
 
         /*printf("DST IP:%x , %x\n", dstip & rules[i].dstmask, rules[i].dstip);*/
-        if((dstip & rules[i].dstmask) != rules[i].dstip)
+        if ((dstip & rules[i].dstmask) != rules[i].dstip)
         {
             i++;
             continue;
         }
 
-        if(strcmp(rules[i].dstport, "-") != 0 && strcmp(cnt.dstport ,rules[i].dstport) != 0)
+        if (strcmp(rules[i].dstport, "-") != 0 && strcmp(cnt.dstport, rules[i].dstport) != 0)
         {
             i++;
             continue;
@@ -385,7 +385,7 @@ int socksBindReply(int port, int status, int fd)
     write(fd, socks4_reply, 8);
 }
 
-int connectTCP(char* dstip, char* dstport)
+int connectTCP(char *dstip, char *dstport)
 {
     struct sockaddr_in serv_addr;
     int serfd = socket(AF_INET, SOCK_STREAM, 0);
@@ -420,7 +420,7 @@ int passiveTCP()
         exit(1);
     }
 
-	/* -1 if bind fail, 0 if success */
+    /* -1 if bind fail, 0 if success */
     if (bind(bindfd, (struct sockaddr *)&bind_addr, sizeof(struct sockaddr)) < 0)
     {
         fprintf(stderr, "bind error:");
@@ -466,12 +466,12 @@ int doRedirect(int clifd, int serfd)
         {
             len = read(clifd, buffer, BUFFER_LEN);
             /*fprintf(stderr, "==========>CLI READ:%d\n", len);*/
-            if(len < 0)
+            if (len < 0)
             {
                 fprintf(stderr, "read error:");
                 perror(strerror(errno));
             }
-            else if(len == 0)
+            else if (len == 0)
             {
                 close(clifd);
                 close(serfd);
@@ -487,12 +487,12 @@ int doRedirect(int clifd, int serfd)
         {
             len = read(serfd, buffer, BUFFER_LEN);
             /*fprintf(stderr, "==========>SER READ:%d\n", len);*/
-            if(len < 0)
+            if (len < 0)
             {
                 fprintf(stderr, "read error:");
                 perror(strerror(errno));
             }
-            else if(len == 0)
+            else if (len == 0)
             {
                 close(clifd);
                 close(serfd);

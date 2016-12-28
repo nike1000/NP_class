@@ -24,7 +24,7 @@
 
 typedef struct Connection
 {
-    char* mode;
+    char *mode;
     char srcip[16];
     char srcport[6];
     char dstip[16];
@@ -37,8 +37,8 @@ typedef struct Socks4Packet
     unsigned char cd;
     unsigned char dstport[2];
     unsigned char dstip[4];
-    unsigned char* userid;   /* option */
-    unsigned char* hostname; /* option */
+    unsigned char *userid;   /* option */
+    unsigned char *hostname; /* option */
 } Socks4Packet;
 
 typedef struct FirewallRule
@@ -54,10 +54,9 @@ typedef struct FirewallRule
 
 int startSerever();
 Socks4Packet handleSocksRequest(int clifd);
-char* hostname_to_ip(char* hostname, char* ip);
+char *hostname_to_ip(char *hostname, char *ip);
 int firewallAccessCheck(int rulesum);
-int connectTCP(char* dstip, char* dstport);
+int connectTCP(char *dstip, char *dstport);
 int doRedirect(int clifd, int serfd);
 
 #endif
-

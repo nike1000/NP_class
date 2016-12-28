@@ -163,7 +163,7 @@ int connectServer()
                 cli_addr.sin_addr = *((struct in_addr *)hostname->h_addr);
                 cli_addr.sin_port = htons(atoi(clients[i].is_socks ? clients[i].sock_port : clients[i].host_port));
 
-                if(!clients[i].is_socks)
+                if (!clients[i].is_socks)
                 {
                     int flags = fcntl(clients[i].clifd, F_GETFL, 0);
                     fcntl(clients[i].clifd, F_SETFL, flags | O_NONBLOCK);
@@ -205,18 +205,18 @@ int connectServer()
                     char *dstip = inet_ntoa(*((struct in_addr *)he->h_addr)); /* get IP */
                     int j;
                     char *iptoken;
-                    for(j = 4, iptoken = strtok(dstip, ".\r\n"); j <= 7 && iptoken; j++, iptoken = strtok(NULL, ".\r\n"))
+                    for (j = 4, iptoken = strtok(dstip, ".\r\n"); j <= 7 && iptoken; j++, iptoken = strtok(NULL, ".\r\n"))
                     {
                         socks4_request[j] = atoi(iptoken);
                     }
                 }
 
                 write(clients[i].clifd, socks4_request, 8);
-                if(read(clients[i].clifd, socks4_reply, 8) > 0)
+                if (read(clients[i].clifd, socks4_reply, 8) > 0)
                 {
-                    if(socks4_reply[0] == 0 && socks4_reply[1] == 90)
+                    if (socks4_reply[0] == 0 && socks4_reply[1] == 90)
                     {
-                        //socks granted
+                        // socks granted
                     }
                     else
                     {
@@ -279,7 +279,7 @@ int connectServer()
                         {
                             getline(&cmdline, &cmdlen, clients[i].batch_fp);
                             int w = write(clients[i].clifd, cmdline, strlen(cmdline));
-                            while(w < 0)
+                            while (w < 0)
                             {
                                 sleep(1);
                                 w = write(clients[i].clifd, cmdline, strlen(cmdline));
